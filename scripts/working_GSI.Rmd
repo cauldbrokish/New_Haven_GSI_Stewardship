@@ -1,0 +1,55 @@
+---
+title: "New Haven GSI Stewardship"
+author: "Clare Auld-Brokish (with Dexter Locke)"
+date: "`r format(Sys.time())`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+# 0 set up
+```{r}
+
+# Load libraries 
+packs <-c('tidyverse'   # cuz
+          , 'tidylog'   # prints out what was done in dplyr and tidyr; VERBOSE
+          # , 'tidygeocoder' # geocode addressses
+          , 'tidycensus'   # access Census data
+          , 'sf'           # for spatial data support
+          , 'mapview'      # web maps for zooming and panning around
+          )
+
+if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packs, rownames(installed.packages())))
+}
+
+# load the packages all at once
+vapply(packs, library, character.only = TRUE, logical(1),
+       logical.return = TRUE, quietly = TRUE)
+
+
+```
+
+
+# 1 read in data
+## A Neighborhoods
+```{r}
+
+(neighs <- st_read('input_data/New_Haven_Neighborhoods/Neighborhood.shp'))
+
+
+neighs |> mapview()
+```
+
+
+## B Parks
+```{r}
+
+(parks <- st_read('input_data/NewHavenParksLayers_08032021/NewHavenParks.shp'))
+
+parks |> mapview()
+
+parks |> mapview() + mapview(neighs)
+
+```
+
