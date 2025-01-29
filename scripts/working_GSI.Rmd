@@ -67,6 +67,8 @@ st_layers('input_data/URI_Bioswale.gdb/')
 
 # TOOD read in the other bioswale data
 
-
+(gsi_2 <- st_read('input_data/URI_Bioswale.gdb/' # path
+                  , 'Bioswales_DT_N') # data
+  )
 ```
 
