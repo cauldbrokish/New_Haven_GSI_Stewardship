@@ -53,3 +53,20 @@ parks |> mapview() + mapview(neighs)
 
 ```
 
+
+
+## C GSI
+```{r}
+
+# what's in the geodatabase?
+st_layers('input_data/URI_Bioswale.gdb/')
+
+(gsi_1 <- st_read('input_data/URI_Bioswale.gdb/' # path
+                  , 'Bioswales_1') # data
+  )
+
+# TOOD read in the other bioswale data
+
+
+```
+
