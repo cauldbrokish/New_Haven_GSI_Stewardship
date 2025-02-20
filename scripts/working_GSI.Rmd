@@ -106,9 +106,26 @@ mapview(gsi, zcol = 'file')
 ```{r}
 gsi |> glimpse()
 
+gsi |> select(GI_Type)
+
+gsi |> 
+  st_drop_geometry() |> #removes sticky geometries
+  tabyl(file)
+
+gsi |> 
+  st_drop_geometry() |> #removes sticky geometries
+  tabyl(curb_type, file)
+
 gsi |> 
   st_drop_geometry() |> 
-  tabyl(curb_type, file)
+  tabyl(file, Install_Year,Fencing) |> 
+  bind_rows(.id = "file") #counts number of GSI that meets the following conditions
+
+gsi |> 
+  st_drop_geometry() |> 
+  group_by(file, Install_Year, Fencing) |> 
+  summarize(n=n()) |> 
+  ungroup() #makes as many variables as you want 
 
 gsi |> 
   st_drop_geometry() |> 
