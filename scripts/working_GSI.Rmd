@@ -17,6 +17,7 @@ packs <-c('tidyverse'   # cuz
           , 'tidycensus'   # access Census data
           , 'sf'           # for spatial data support
           , 'mapview'      # web maps for zooming and panning around
+          , 'janitor'   # helps clean things pipe-friendly cross-tabulations
           )
 
 if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
@@ -62,14 +63,51 @@ parks |> mapview() + mapview(neighs)
 st_layers('input_data/URI_Bioswale.gdb/')
 
 (gsi_1 <- st_read('input_data/URI_Bioswale.gdb/' # path
-                  , 'Bioswales_1') # data
+                  , 'Bioswales_1' # data
+                  , as_tibble = TRUE) |> 
+    mutate(file = 'Bioswales_1')
   )
 
-# TOOD read in the other bioswale data
 
 (gsi_2 <- st_read('input_data/URI_Bioswale.gdb/' # path
-                  , 'Bioswales_DT_N') # data
+                  , 'Bioswales_DT_N' # data
+                  , as_tibble = TRUE) |> 
+    mutate(file = 'Bioswales_DT_N')
   )
+
+(gsi_3 <- st_read('input_data/URI_Bioswale.gdb/' # path
+                  , 'Bioswales_DT_S' # data
+                  , as_tibble = TRUE) |> 
+    mutate(file = 'Bioswales_DT_S')
+  )
+
+# Which columns are in common?
+compare_df_cols(gsi_1, gsi_2, gsi_3)
+
+
+# gsi_1 |> mapview()
+# gsi_2 |> mapview()
+# gsi_3 |> mapview()
+
+# mapview(gsi_1) + mapview(gsi_2) + mapview(gsi_3) 
+
+# att_tbl <- st_read('input_data/URI_Bioswale.gdb' # path
+#                    , 'Bioswales_DT_S__ATTACH' # data
+#                    , as_tibble = TRUE) 
+
+test_combo <- 
+  bind_rows(gsi_1, gsi_2, gsi_3)
+
+mapview(test_combo, zcol = 'file')
+
+```
+
+# join the table and GSI points
+```{r}
+
+gsi_3 |> 
+  left_join(att_tbl, by = c('GlobalID' = 'GLOBALID'))
+
 ```
 
 
