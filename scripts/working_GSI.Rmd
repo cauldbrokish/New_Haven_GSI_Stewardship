@@ -152,6 +152,9 @@ thing2 <- st_read(
   '../GSI STEWARDSHIP Project_data_too_big/City_layers.gdb', 'NH_Publishing_SDE_DBO_NH_2016_Structures_Poly')
 
 mapview(thing2)
+
+
+
 ```
 
 
