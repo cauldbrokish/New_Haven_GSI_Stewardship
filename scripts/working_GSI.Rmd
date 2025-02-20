@@ -95,18 +95,29 @@ compare_df_cols(gsi_1, gsi_2, gsi_3)
 #                    , 'Bioswales_DT_S__ATTACH' # data
 #                    , as_tibble = TRUE) 
 
-test_combo <- 
+gsi <- 
   bind_rows(gsi_1, gsi_2, gsi_3)
 
-mapview(test_combo, zcol = 'file')
+mapview(gsi, zcol = 'file')
 
 ```
 
-# join the table and GSI points
+# exploratory
 ```{r}
+gsi |> glimpse()
 
-gsi_3 |> 
-  left_join(att_tbl, by = c('GlobalID' = 'GLOBALID'))
+gsi |> 
+  st_drop_geometry() |> 
+  tabyl(curb_type, file)
+
+gsi |> 
+  st_drop_geometry() |> 
+  tabyl(Barrier, file)
+
+gsi |> 
+  st_drop_geometry() |> 
+  tabyl(sidewalk_w, file)
+
 
 ```
 
