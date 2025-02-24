@@ -56,7 +56,7 @@ parks |> mapview() + mapview(neighs)
 
 
 
-## C GSI
+## C GSI: URI
 ```{r}
 
 # what's in the geodatabase?
@@ -101,6 +101,98 @@ gsi <-
 mapview(gsi, zcol = 'file')
 
 ```
+
+
+
+## D GSI: City of New Haven
+```{r}
+
+list.files('../GSI STEWARDSHIP Project_data_too_big')
+
+st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
+
+inlet <- 
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+          , 'inlet'
+          , as_tibble = TRUE)
+
+inspection <- 
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+          , 'GI_Inspection'
+          , as_tibble = TRUE)
+
+
+inspection_records <- 
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+          , 'GI_Inspection__ATTACH'
+          , as_tibble = TRUE)
+
+
+# take a look
+inlet |> glimpse() # transpose
+inlet |> mapview(zcol = 'Install_Year')
+
+inspection |> glimpse()
+
+# is the unique ID really unique? 
+all.equal(
+  inspection |> distinct(GlobalID) |> nrow()
+, inspection |> nrow()
+)
+
+# short table to long table
+inlet |> 
+  left_join(inspection_records, by = c('GlobalID' = 'GLOBALID'))
+
+# long table to short table
+inspection |> 
+  left_join(inlet, by = 'GlobalID')
+
+
+inlet # GlobalID
+inspection # ASSETGUID and GlobalID
+
+# THIS WORKS
+inlet |> 
+  left_join(inspection, by = c('GlobalID' = 'ASSETGUID'))
+
+(inspection_freq <- 
+  inspection |> 
+  tabyl(ASSETGUID) |> 
+  as_tibble() |> 
+  arrange(desc(n)))
+
+# how often have these been inspected?
+inspection_freq |> summary() # roughly 4x
+
+# what's the distribution of frequencies?
+inspection_freq_freq <- 
+  inspection_freq |> 
+  tabyl(n) |> 
+  as_tibble()
+
+inspection_freq_freq |> plot()
+
+# pre-summarized: geom_col
+inspection_freq_freq |> 
+  ggplot(aes(n, n_n)) +
+  geom_col() +
+  theme_bw(16) +
+  NULL
+
+# not yet summarized: geom_bar
+inspection_freq |> 
+  ggplot(aes(n)) +
+  # geom_bar() +
+  # geom_histogram() +
+  geom_density() +
+  theme_bw(16) +
+  NULL
+
+```
+
+
+
 
 # exploratory
 ```{r}
@@ -152,9 +244,9 @@ thing2 <- st_read(
   '../GSI STEWARDSHIP Project_data_too_big/City_layers.gdb', 'NH_Publishing_SDE_DBO_NH_2016_Structures_Poly')
 
 mapview(thing2)
-
-
-
 ```
+
+
+
 
 
