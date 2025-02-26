@@ -7,6 +7,7 @@ editor_options:
   chunk_output_type: console
 ---
 
+
 # 0 set up
 ```{r}
 
@@ -33,6 +34,150 @@ vapply(packs, library, character.only = TRUE, logical(1),
 
 
 # 1 read in data
+## A GSI: City of New Haven
+```{r}
+list.files('../GSI STEWARDSHIP Project_data_too_big')
+
+st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
+
+inlet <- 
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+          , 'inlet'
+          , as_tibble = TRUE)
+
+inspection <- 
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+          , 'GI_Inspection'
+          , as_tibble = TRUE)
+inspection |> map(~sum(is.na(.)))
+# CONDITION DEBRIS VEGETATION OIL   FRAME     NOTES
+
+# mostly pictures
+# inspection_records <- 
+#   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+#           , 'GI_Inspection__ATTACH'
+#           , as_tibble = TRUE)
+
+
+# take a look
+inlet |> glimpse() # transpose
+inlet |> mapview(zcol = 'Install_Year')
+
+inspection |> glimpse()
+
+# is the unique ID really unique? 
+all.equal(
+  inspection |> distinct(GlobalID) |> nrow()
+, inspection |> nrow()
+)
+
+# # short table to long table. 1:M
+# inlet |> 
+#   left_join(inspection_records, by = c('GlobalID' = 'GLOBALID'))
+
+# # long table to short table
+# inspection |> 
+#   left_join(inlet, by = 'GlobalID')
+# 
+# 
+# inlet # GlobalID
+# inspection # ASSETGUID and GlobalID
+
+# THIS WORKS
+# FACILITYID is what to use?
+inlet |> 
+  left_join(inspection, by = c('GlobalID' = 'GlobalID')) # or ASSETGUID
+
+# USE THIS
+inlet |> # missing records are a known error
+  left_join(inspection, by = 'FACILITYID') # better but missing. Patch with global
+
+# missing records are a known error
+inlet |> 
+  anti_join(inspection, by = 'FACILITYID')
+
+
+inlet |> 
+  anti_join(inspection, by = c('GlobalID' = 'GlobalID'))
+
+
+inspection_long <- 
+  inspection |> 
+  left_join(
+    inlet |> select(-c(CreationDate, EditDate, Creator, Editor))
+              , by = c('FACILITYID' = 'FACILITYID')) |> 
+  select(GlobalID.x, GlobalID.y, everything()) 
+
+```
+
+# 2 Exploratory Data Analyses
+```{r}
+(inspection_freq <- 
+  inspection |> 
+  tabyl(ASSETGUID) |> 
+  as_tibble() |> 
+  arrange(desc(n)))
+
+# how often have these been inspected?
+inspection_freq |> summary() # roughly 4x
+
+# what's the distribution of frequencies?
+inspection_freq_freq <- 
+  inspection_freq |> 
+  tabyl(n) |> 
+  as_tibble()
+
+inspection_freq_freq |> plot()
+
+# pre-summarized: geom_col
+inspection_freq_freq |> 
+  ggplot(aes(n, n_n)) +
+  geom_col() +
+  theme_bw(16) +
+  NULL
+
+# not yet summarized: geom_bar
+inspection_freq |> 
+  ggplot(aes(n)) +
+  # geom_bar() +
+  # geom_histogram() +
+  geom_density() +
+  theme_bw(16) +
+  NULL
+
+
+inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
+
+# FIXME Clare
+inspection |> 
+  tabyl(CONDITION)
+
+inspection |> 
+  tabyl(CONDITION) |> 
+  as_tibble()
+
+# try help(factor) to learn more about setting the levels of a factor
+# to make them appear in order (we do NOT need an ordered factor)
+inspection |> 
+  tabyl(CONDITION) |> 
+  as_tibble() |> 
+  ggplot(aes(CONDITION, n)) +
+  geom_col()
+
+
+inspection |> 
+  tabyl(CONDITION) |> 
+  as_tibble() |> 
+  ggplot(aes(n, CONDITION)) + # easier to read.
+  geom_col()
+
+
+# repeat the lines above, but use DEBRIS, VEGTATION, OIL, and/or FRAME columns
+
+
+```
+
+
 ## A Neighborhoods
 ```{r}
 
@@ -56,8 +201,12 @@ parks |> mapview() + mapview(neighs)
 
 
 
-## C GSI: URI
-```{r}
+
+## C GSI: URI - already folded into city data: NO NEED TO USE
+```{r eval=FALSE, include=FALSE}
+
+# Downtown only from the siting process
+# ATTATCH was pictures and other field-based data
 
 # what's in the geodatabase?
 st_layers('input_data/URI_Bioswale.gdb/')
@@ -103,93 +252,6 @@ mapview(gsi, zcol = 'file')
 ```
 
 
-
-## D GSI: City of New Haven
-```{r}
-
-list.files('../GSI STEWARDSHIP Project_data_too_big')
-
-st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
-
-inlet <- 
-  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
-          , 'inlet'
-          , as_tibble = TRUE)
-
-inspection <- 
-  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
-          , 'GI_Inspection'
-          , as_tibble = TRUE)
-
-
-inspection_records <- 
-  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
-          , 'GI_Inspection__ATTACH'
-          , as_tibble = TRUE)
-
-
-# take a look
-inlet |> glimpse() # transpose
-inlet |> mapview(zcol = 'Install_Year')
-
-inspection |> glimpse()
-
-# is the unique ID really unique? 
-all.equal(
-  inspection |> distinct(GlobalID) |> nrow()
-, inspection |> nrow()
-)
-
-# short table to long table
-inlet |> 
-  left_join(inspection_records, by = c('GlobalID' = 'GLOBALID'))
-
-# long table to short table
-inspection |> 
-  left_join(inlet, by = 'GlobalID')
-
-
-inlet # GlobalID
-inspection # ASSETGUID and GlobalID
-
-# THIS WORKS
-inlet |> 
-  left_join(inspection, by = c('GlobalID' = 'ASSETGUID'))
-
-(inspection_freq <- 
-  inspection |> 
-  tabyl(ASSETGUID) |> 
-  as_tibble() |> 
-  arrange(desc(n)))
-
-# how often have these been inspected?
-inspection_freq |> summary() # roughly 4x
-
-# what's the distribution of frequencies?
-inspection_freq_freq <- 
-  inspection_freq |> 
-  tabyl(n) |> 
-  as_tibble()
-
-inspection_freq_freq |> plot()
-
-# pre-summarized: geom_col
-inspection_freq_freq |> 
-  ggplot(aes(n, n_n)) +
-  geom_col() +
-  theme_bw(16) +
-  NULL
-
-# not yet summarized: geom_bar
-inspection_freq |> 
-  ggplot(aes(n)) +
-  # geom_bar() +
-  # geom_histogram() +
-  geom_density() +
-  theme_bw(16) +
-  NULL
-
-```
 
 
 
