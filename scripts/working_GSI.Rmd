@@ -38,6 +38,7 @@ vapply(packs, library, character.only = TRUE, logical(1),
 ```{r}
 list.files('../GSI STEWARDSHIP Project_data_too_big')
 
+#stlayers is like list.files but for .gdb files
 st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
 
 inlet <- 
@@ -48,9 +49,22 @@ inlet <-
 inspection <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'GI_Inspection'
-          , as_tibble = TRUE)
-inspection |> map(~sum(is.na(.)))
+          , as_tibble = TRUE) |> 
+mutate(Condition=factor(CONDITION,
+    levels=c("Unknown", NA, "Very Poor", "Poor", "Fair", "Good", "Very Good", "Excellent"))
+  , islegit=ifelse(Condition=="Unknown" | is.na(Condition)
+                   , "notlegit"
+                   , "legit"))
+
+# Double-checks classifications
+inspection |> tabyl(Condition,islegit)
+
+# This counts "missing-ness"
+inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
 # CONDITION DEBRIS VEGETATION OIL   FRAME     NOTES
+
+# Look at all the variables and glimpse data
+inspection |> glimpse()
 
 # mostly pictures
 # inspection_records <- 
@@ -112,6 +126,8 @@ inspection_long <-
 
 # 2 Exploratory Data Analyses
 ```{r}
+
+# Tabulate frequency of the asset_GLOBALID A
 (inspection_freq <- 
   inspection |> 
   tabyl(ASSETGUID) |> 
@@ -122,16 +138,23 @@ inspection_long <-
 inspection_freq |> summary() # roughly 4x
 
 # what's the distribution of frequencies?
-inspection_freq_freq <- 
+(inspection_freq_freq <- 
   inspection_freq |> 
   tabyl(n) |> 
-  as_tibble()
+  as_tibble())
 
+# Base R plotting tool
 inspection_freq_freq |> plot()
 
 # pre-summarized: geom_col
 inspection_freq_freq |> 
-  ggplot(aes(n, n_n)) +
+  ggplot(aes(n,n_n)) + #in the aesthetic: map the data visually
+  geom_col() +
+  theme_bw(16) +
+  NULL #NULL shuts down the function above
+
+inspection_freq_freq |> 
+  ggplot(aes(n_n,n)) + #in the aesthetic: map the data visually
   geom_col() +
   theme_bw(16) +
   NULL
@@ -140,8 +163,8 @@ inspection_freq_freq |>
 inspection_freq |> 
   ggplot(aes(n)) +
   # geom_bar() +
-  # geom_histogram() +
-  geom_density() +
+  geom_histogram() +
+  # geom_density() +
   theme_bw(16) +
   NULL
 
@@ -149,30 +172,50 @@ inspection_freq |>
 inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
 
 # FIXME Clare
-inspection |> 
+
+## Recent Inspections
+recent_inspections <- 
+  inspection |> 
+  group_by(ASSETGUID) |> 
+  arrange(EditDate) |> 
+  slice(1) |> 
+  ungroup()
+  
+recent_inspections |> 
+  tabyl(Condition) |> 
+  ggplot(aes(Condition, n)) +
+  geom_col()
+
+
+recent_inspections |> 
   tabyl(CONDITION)
 
-inspection |> 
+recent_inspections |> 
   tabyl(CONDITION) |> 
   as_tibble()
 
 # try help(factor) to learn more about setting the levels of a factor
 # to make them appear in order (we do NOT need an ordered factor)
-inspection |> 
-  tabyl(CONDITION) |> 
+recent_inspections |> 
+  tabyl(Condition, islegit) |> 
   as_tibble() |> 
-  ggplot(aes(CONDITION, n)) +
-  geom_col()
+  pivot_longer(-Condition, names_to = "islegit") |> 
+  ggplot(aes(value, Condition)) +
+  geom_col() + 
+  facet_wrap(~islegit, scales="free") + 
+  NULL
 
-
-inspection |> 
-  tabyl(CONDITION) |> 
-  as_tibble() |> 
-  ggplot(aes(n, CONDITION)) + # easier to read.
-  geom_col()
-
-
+# Repeat above code using debris, vegetation, and oil variables 
 # repeat the lines above, but use DEBRIS, VEGTATION, OIL, and/or FRAME columns
+
+# Debris Tibble
+recent_inspections |> 
+  group_by(DEBRIS, Condition) |> 
+  count() |> 
+ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~DEBRIS, scales="free") + 
+  NULL
 
 
 ```
@@ -307,6 +350,7 @@ thing2 <- st_read(
 
 mapview(thing2)
 ```
+
 
 
 
