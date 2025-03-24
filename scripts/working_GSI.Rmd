@@ -122,6 +122,11 @@ inspection_long <-
               , by = c('FACILITYID' = 'FACILITYID')) |> 
   select(GlobalID.x, GlobalID.y, everything()) 
 
+inspection_long |>
+  ggplot(aes(EditDate, Condition, group = FACILITYID, color = Condition)) +
+  geom_line() +
+  facet_wrap(~islegit, scales = 'free')
+
 ```
 
 # 2 Exploratory Data Analyses
@@ -212,10 +217,11 @@ recent_inspections |>
 recent_inspections |> 
   group_by(DEBRIS, Condition) |> 
   count() |> 
-ggplot(aes(n, Condition)) +
+  ggplot(aes(n, Condition)) +
   geom_col() + 
   facet_wrap(~DEBRIS, scales="free") + 
   NULL
+
 
 
 ```
