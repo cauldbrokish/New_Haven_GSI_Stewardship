@@ -56,6 +56,16 @@ mutate(Condition=factor(CONDITION,
                    , "notlegit"
                    , "legit"))
 
+# parcels <- 
+#   st_read('/Users/dlocke/URI_data/Connecticut_Parcels.gdb', 'deepgis_DEEP_PARCEL') |> 
+#   filter(TOWN == 'New Haven')
+# 
+# parcels |> filter(TOWN == 'New Haven') |> mapview::mapview()
+
+# parcels <- 
+#   st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management.geojson') |> 
+#   select(parcel_id, )
+  
 # Double-checks classifications
 inspection |> tabyl(Condition,islegit)
 
@@ -123,9 +133,18 @@ inspection_long <-
   select(GlobalID.x, GlobalID.y, everything()) 
 
 inspection_long |>
-  ggplot(aes(EditDate, Condition, group = FACILITYID, color = Condition)) +
-  geom_line() +
-  facet_wrap(~islegit, scales = 'free')
+  ggplot(aes(EditDate, Condition, group = ASSETGUID)) +
+  geom_line(alpha = .2) +
+  facet_wrap(~islegit, scales = 'free') +
+  # facet_wrap(~Planting_Plan, scales = 'free') +
+  NULL
+
+inspection_long |>
+  filter(islegit == 'legit') |> 
+  ggplot(aes(EditDate, Condition, group = ASSETGUID)) +
+  geom_line(alpha = .2) +
+  theme_bw(16) +
+  NULL
 
 ```
 
