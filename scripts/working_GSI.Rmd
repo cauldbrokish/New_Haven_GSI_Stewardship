@@ -36,18 +36,19 @@ vapply(packs, library, character.only = TRUE, logical(1),
 # 1 read in data
 ## A GSI: City of New Haven
 ```{r}
-list.files('../GSI STEWARDSHIP Project_data_too_big')
+
+list.files('../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big')
 
 #stlayers is like list.files but for .gdb files
-st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
+st_layers('../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
 
 inlet <- 
-  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+  st_read(  '../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'inlet'
           , as_tibble = TRUE)
 
 inspection <- 
-  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+  st_read(  '../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'GI_Inspection'
           , as_tibble = TRUE) |> 
 mutate(Condition=factor(CONDITION,
@@ -63,7 +64,7 @@ mutate(Condition=factor(CONDITION,
 # parcels |> filter(TOWN == 'New Haven') |> mapview::mapview()
 
 # parcels <- 
-#   st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management.geojson') |> 
+#   st_read('../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management.geojson') |> 
 #   select(parcel_id, )
   
 # Double-checks classifications
@@ -158,6 +159,8 @@ inspection_long |>
   as_tibble() |> 
   arrange(desc(n)))
 
+# Tabulate the frequency of 
+
 # how often have these been inspected?
 inspection_freq |> summary() # roughly 4x
 
@@ -210,7 +213,6 @@ recent_inspections |>
   ggplot(aes(Condition, n)) +
   geom_col()
 
-
 recent_inspections |> 
   tabyl(CONDITION)
 
@@ -241,7 +243,47 @@ recent_inspections |>
   facet_wrap(~DEBRIS, scales="free") + 
   NULL
 
+# I wonder why this graph looks so wonky. . .
+recent_inspections |> 
+  group_by(DEBRIS, Condition) |> 
+  count() |> 
+  ggplot(aes(DEBRIS, Condition)) +
+  geom_col() +
+  theme_bw(16) +
+  NULL
 
+(recent_inspections <- # Is there a difference between inspections and recent_inspections?
+  Debris |> 
+    tabyl(Debris) |> 
+  as_tibble() |> 
+  arrange(desc(n)))
+
+# Vegetation Tibble 
+recent_inspections |> 
+  group_by(VEGETATION, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~VEGETATION, scales="free") + 
+  NULL
+
+# Oil Tibble 
+recent_inspections |> 
+  group_by(OIL, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~OIL, scales="free") + 
+  NULL
+
+# Frame Tibble? I can't remember what this refers to 
+recent_inspections |> 
+  group_by(FRAME, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~FRAME, scales="free") + 
+  NULL
 
 ```
 
