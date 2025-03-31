@@ -34,7 +34,22 @@ vapply(packs, library, character.only = TRUE, logical(1),
 
 
 # 1 read in data
-## A GSI: City of New Haven
+## A Neighborhoods
+```{r}
+
+(neighs <- 
+   st_read('input_data/New_Haven_Neighborhoods/Neighborhood.shp', as_tibble = TRUE) |> 
+   select(Neighborhood = Neighbor_1) |> 
+   st_transform(3857)
+ )
+
+
+neighs |> mapview()
+```
+
+
+
+## B GSI: City of New Haven
 ```{r}
 list.files('../GSI STEWARDSHIP Project_data_too_big')
 
@@ -44,7 +59,8 @@ st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71
 inlet <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'inlet'
-          , as_tibble = TRUE)
+          , as_tibble = TRUE) |> 
+  st_intersection(neighs)
 
 inspection <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
@@ -242,18 +258,22 @@ recent_inspections |>
   NULL
 
 
+gsi_per_neigh <- 
+  inlet |> 
+  st_drop_geometry() |> 
+  group_by(Neighborhood) |> 
+  count()
+
+neighs |> 
+  left_join(gsi_per_neigh, by = "Neighborhood") %>%
+  mutate(  n = ifelse(is.na(n), 0, n)
+         , area_m2 = st_area(.)
+         , gsi_per_area = n / area_m2
+         ) |> 
+  mapview(zcol = 'gsi_per_area', layer.name = 'GSI counts /<br>neigh area')
 
 ```
 
-
-## A Neighborhoods
-```{r}
-
-(neighs <- st_read('input_data/New_Haven_Neighborhoods/Neighborhood.shp'))
-
-
-neighs |> mapview()
-```
 
 
 ## B Parks
