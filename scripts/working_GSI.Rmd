@@ -300,13 +300,13 @@ recent_inspections |>
   facet_wrap(~OIL, scales="free") + 
   NULL
 
-<<<<<<< HEAD
+
 gsi_per_neigh <- 
   inlet |> 
   st_drop_geometry() |> 
   group_by(Neighborhood) |> 
   count()
-=======
+
 # Frame Tibble? I can't remember what this refers to 
 recent_inspections |> 
   group_by(FRAME, Condition) |> 
@@ -315,7 +315,7 @@ recent_inspections |>
   geom_col() + 
   facet_wrap(~FRAME, scales="free") + 
   NULL
->>>>>>> 07981e159eb4e68f3794c7df7090faf13b6d8eef
+
 
 neighs |> 
   left_join(gsi_per_neigh, by = "Neighborhood") %>%
@@ -325,13 +325,11 @@ neighs |>
          ) |> 
   mapview(zcol = 'gsi_per_area', layer.name = 'GSI counts /<br>neigh area')
 
-<<<<<<< HEAD
-=======
+
 neighs |> mapview()
 
 
 
->>>>>>> 07981e159eb4e68f3794c7df7090faf13b6d8eef
 ```
 
 
