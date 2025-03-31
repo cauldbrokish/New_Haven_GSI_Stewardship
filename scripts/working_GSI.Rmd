@@ -205,7 +205,7 @@ recent_inspections <-
   inspection |> 
   group_by(ASSETGUID) |> 
   arrange(EditDate) |> 
-  slice(1) |> 
+  slice(1) |> # slice_max, slice_min instead of arrange |> slice 
   ungroup()
   
 recent_inspections |> 
@@ -243,20 +243,28 @@ recent_inspections |>
   facet_wrap(~DEBRIS, scales="free") + 
   NULL
 
-# I wonder why this graph looks so wonky. . .
+# (recent_inspections <- # Is there a difference between inspections and recent_inspections?
+  recent_inspections |> 
+    tabyl(DEBRIS) |> 
+  as_tibble() |> 
+  arrange(desc(n))
+  # )
+  
+# The only bioswales without debris in them were assessed in a "poor", "very poor", and "NA" condition  
 recent_inspections |> 
   group_by(DEBRIS, Condition) |> 
   count() |> 
-  ggplot(aes(DEBRIS, Condition)) +
+  ggplot(aes(n, Condition, fill = DEBRIS)) +
   geom_col() +
   theme_bw(16) +
+  theme(legend.position = "bottom") +
+  # theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5)) +
+  facet_wrap(~DEBRIS) +
+  # coord_flip() + 
   NULL
 
-(recent_inspections <- # Is there a difference between inspections and recent_inspections?
-  Debris |> 
-    tabyl(Debris) |> 
-  as_tibble() |> 
-  arrange(desc(n)))
+# Saving charts as .png files in "figures" folder 
+ggsave( filename = paste0('figures/Debris_Condition_', Sys.Date(), '.png'))
 
 # Vegetation Tibble 
 recent_inspections |> 
@@ -295,6 +303,9 @@ recent_inspections |>
 
 
 neighs |> mapview()
+
+
+
 ```
 
 
@@ -305,7 +316,10 @@ neighs |> mapview()
 
 parks |> mapview()
 
-parks |> mapview() + mapview(neighs)
+# parks |> mapview() + 
+mapview(parks) +
+  mapview(neighs, zcol = "Neighborho", layer.name = "neighborhood") +
+  mapview(inlet)
 
 ```
 
