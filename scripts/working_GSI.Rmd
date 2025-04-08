@@ -19,6 +19,7 @@ packs <-c('tidyverse'   # cuz
           , 'sf'           # for spatial data support
           , 'mapview'      # web maps for zooming and panning around
           , 'janitor'   # helps clean things pipe-friendly cross-tabulations
+          , 'leafsync'  # linked maps
           )
 
 if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
@@ -47,24 +48,69 @@ vapply(packs, library, character.only = TRUE, logical(1),
 neighs |> mapview()
 ```
 
-
-
-## B GSI: City of New Haven
+## B watersheds and zonning
 ```{r}
 
-list.files('../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big')
+sheds <- 
+  st_read('../GSI STEWARDSHIP Project_data_too_big/12 digit Hydrologic Unit.geojson') |> 
+  st_transform(st_crs(neighs))
+
+mapview(neighs, alpha.regions = 0, lwd = 2) + mapview(sheds, zcol = 'Name') 
+
+# st_layers('../GSI STEWARDSHIP Project_data_too_big/_ags_data0AA96A07DF994B819C3A75306E2DD073.gdb')
+
+zoning <- 
+  st_read('../GSI STEWARDSHIP Project_data_too_big/_ags_data0AA96A07DF994B819C3A75306E2DD073.gdb') |> 
+  st_transform(st_crs(neighs))
+
+zoning |> glimpse()
+zoning |> mapview(zcol = 
+                    # 'zone_code'
+                    'districts'
+                    # 'district_category'
+                  )
+
+
+```
+
+
+
+## C GSI: City of New Haven
+```{r}
+
+list.files('../GSI STEWARDSHIP Project_data_too_big')
 
 #stlayers is like list.files but for .gdb files
-st_layers('../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
+st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
 
 inlet <- 
-  st_read(  '../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'inlet'
           , as_tibble = TRUE) |> 
-  st_intersection(neighs)
+  st_intersection(neighs) |> # adds neighborhood name
+  st_intersection(sheds |> 
+                    select(watershed = Name, HUC12)
+                    ) |> 
+  st_intersection(zoning |> 
+                    select(zone_code, districts, district_category)
+                  )
+
+# did those joins work?
+
+
+mapviewOptions(
+    legend.pos = 'bottomleft'
+  , layers.control.pos = 'topright'
+  )
+
+m_neigh <- inlet |> mapview(zcol = 'Neighborhood') # TK
+m_water <- inlet |> mapview(zcol = 'watershed')
+m_zone  <- inlet |> mapview(zcol = 'districts')
+
+leafsync::sync(m_neigh, m_water, m_zone)
 
 inspection <- 
-  st_read(  '../GSI STEWARDSHIP PROJECT/GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'GI_Inspection'
           , as_tibble = TRUE) |> 
 mutate(Condition=factor(CONDITION,
@@ -279,8 +325,8 @@ recent_inspections |>
   # coord_flip() + 
   NULL
 
-# Saving charts as .png files in "figures" folder 
-ggsave( filename = paste0('figures/Debris_Condition_', Sys.Date(), '.png'))
+# # Saving charts as .png files in "figures" folder 
+# ggsave( filename = paste0('figures/Debris_Condition_', Sys.Date(), '.png'))
 
 # Vegetation Tibble 
 recent_inspections |> 
@@ -350,7 +396,15 @@ mapview(parks) +
 
 
 
+# parcels
+```{r}
 
+parcels <- st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management.geojson')
+
+```
+
+
+# OLD BELOW
 ## C GSI: URI - already folded into city data: NO NEED TO USE
 ```{r eval=FALSE, include=FALSE}
 
