@@ -399,7 +399,13 @@ mapview(parks) +
 # parcels
 ```{r}
 
-parcels <- st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management.geojson')
+list.files('../GSI STEWARDSHIP Project_data_too_big/')
+
+# parcels <- 
+#   st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management/New Haven Parcels Management.geojson')
+
+parcels <- 
+  st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management/New Haven Parcels Management (1).geojson')
 
 ```
 
