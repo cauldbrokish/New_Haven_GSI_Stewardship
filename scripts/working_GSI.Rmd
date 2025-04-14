@@ -395,6 +395,28 @@ neighs |> mapview()
 ```
 
 
+# link recent inspections to inlets
+```{r}
+# inlets dont change. they have fixed locations with non-changing attributes
+# inspections (which has condition) DOES change, hence recent_inspections
+
+inlet_recent_inspection <- 
+  inlet |> 
+  left_join(
+    recent_inspections |> select(GlobalID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
+    , by = c('FACILITYID' = 'FACILITYID') # not perfect like Dawn said
+    )
+
+# double check
+inlet_recent_inspection |> glimpse()
+
+inlet_recent_inspection |> 
+  st_drop_geometry() |> 
+  group_by(Condition, islegit) |> 
+  count()
+
+```
+
 
 ## B Parks
 ```{r}
