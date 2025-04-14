@@ -227,7 +227,30 @@ inspection_long |>
 
 ```
 
-# 2 Exploratory Data Analyses
+# 2 Link recent inspections to inlets
+```{r}
+# inlets dont change. they have fixed locations with non-changing attributes
+# inspections (which has condition) DOES change, hence recent_inspections
+
+inlet_recent_inspection <- 
+  inlet |> 
+  left_join(
+    recent_inspections |> select(GlobalID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
+    , by = c('FACILITYID' = 'FACILITYID') # not perfect like Dawn said
+    )
+
+# double check
+inlet_recent_inspection |> glimpse()
+
+inlet_recent_inspection |> 
+  st_drop_geometry() |> 
+  group_by(Condition, islegit) |> 
+  count()
+
+```
+
+# 3 Exploratory
+## A Inspection Frequencies
 ```{r}
 
 # Tabulate frequency of the asset_GLOBALID A
@@ -278,7 +301,10 @@ inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
 
 # FIXME Clare
 
-## Recent Inspections
+```
+
+## B Data Analysis with Condition, DEBRIS, VEGETATION, OIL
+```{r}
 recent_inspections <- 
   inspection |> 
   group_by(ASSETGUID) |> 
@@ -312,7 +338,7 @@ recent_inspections |>
 # Repeat above code using debris, vegetation, and oil variables 
 # repeat the lines above, but use DEBRIS, VEGTATION, OIL, and/or FRAME columns
 
-# Debris Tibble
+# Debris Tibble - the bioswales without debris were in poor, very poor, unknown condition 
 recent_inspections |> 
   group_by(DEBRIS, Condition) |> 
   count() |> 
@@ -328,7 +354,7 @@ recent_inspections |>
   arrange(desc(n))
   # )
   
-# The only bioswales without debris in them were assessed in a "poor", "very poor", and "NA" condition  
+# The only bioswales with debris in them were assessed in a "poor", "very poor", and "NA" condition  
 recent_inspections |> 
   group_by(DEBRIS, Condition) |> 
   count() |> 
@@ -344,24 +370,23 @@ recent_inspections |>
 # # Saving charts as .png files in "figures" folder 
 # ggsave( filename = paste0('figures/Debris_Condition_', Sys.Date(), '.png'))
 
-# Vegetation Tibble 
+# Vegetation Tibble - no bioswales with vegetation? 
 recent_inspections |> 
   group_by(VEGETATION, Condition) |> 
   count() |> 
-  ggplot(aes(n, Condition)) +
+  ggplot(aes(Condition, n)) +
   geom_col() + 
   facet_wrap(~VEGETATION, scales="free") + 
   NULL
 
 # Oil Tibble 
 recent_inspections |> 
-  group_by(OIL, Condition) |> 
+  group_by(Condition, OIL) |> 
   count() |> 
-  ggplot(aes(n, Condition)) +
+  ggplot(aes(Condition, n)) +
   geom_col() + 
   facet_wrap(~OIL, scales="free") + 
   NULL
-
 
 gsi_per_neigh <- 
   inlet |> 
@@ -389,36 +414,108 @@ neighs |>
 
 
 neighs |> mapview()
-
-
-
 ```
 
-
-# link recent inspections to inlets
+## C Inspection Analysis w/ Watersheds and Zoning Layers 
 ```{r}
-# inlets dont change. they have fixed locations with non-changing attributes
-# inspections (which has condition) DOES change, hence recent_inspections
-
-inlet_recent_inspection <- 
-  inlet |> 
-  left_join(
-    recent_inspections |> select(GlobalID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
-    , by = c('FACILITYID' = 'FACILITYID') # not perfect like Dawn said
-    )
-
-# double check
-inlet_recent_inspection |> glimpse()
+# Watershed Condition Tibble - Cove River watershed has the greatest variety of assessments; mostly poor or NA in all other watersheds
+inlet_recent_inspection |> 
+  group_by(watershed, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~watershed, scales="free") +
+  NULL
 
 inlet_recent_inspection |> 
+  group_by(watershed, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = watershed)) +
+  geom_col() +
+  theme_bw(16) +
+  theme(legend.position = "bottom") +
+  # theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5)) +
+  facet_wrap(~watershed) +
+  # coord_flip() + 
+  NULL
+# How to arrange this graph in Mapview? 
+
+# ggsave( filename = paste0('figures/watershed_condition_', Sys.Date(), '.png'))
+
+inlet_recent_inspection |> 
+  mapview()
+
+# Zoning Condition Tibble - NA for most districts but residential (No assessments in other zoning districts?)
+inlet_recent_inspection |> 
+  group_by(districts, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~districts, scales="free") +
+  NULL
+
+inlet_recent_inspection |> 
+  group_by(watershed, districts, Condition) |> 
+  count() |> 
+  ggplot(aes(Condition, n, n)) +
+  geom_col() + 
+  #facet_wrap(~watershed, scales="free") +
+  NULL
+
+inlet_recent_inspection |> 
+    group_by(districts, Condition) |> 
+    count() |> 
+    ggplot(aes(n, Condition, fill = districts)) +
+    geom_col() +
+    theme_bw(16) +
+    theme(legend.position = "bottom") +
+    # theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5)) +
+    facet_wrap(~districts) +
+    # coord_flip() + 
+    NULL
+
+# ggsave( filename = paste0('figures/district_condition_', Sys.Date(), '.png'))
+
+# How to create a scatter plot of this data? How to visualize this data in MapView? 
+# How to create graphs with more than two variables? 
+```
+
+## D Chart Design
+```{r}
+gsi |> glimpse()
+
+gsi |> select(GI_Type)
+
+gsi |> 
+  st_drop_geometry() |> #removes sticky geometries
+  tabyl(file)
+
+gsi |> 
+  st_drop_geometry() |> #removes sticky geometries
+  tabyl(curb_type, file)
+
+gsi |> 
   st_drop_geometry() |> 
-  group_by(Condition, islegit) |> 
-  count()
+  tabyl(file, Install_Year,Fencing) |> 
+  bind_rows(.id = "file") #counts number of GSI that meets the following conditions
+
+gsi |> 
+  st_drop_geometry() |> 
+  group_by(file, Install_Year, Fencing) |> 
+  summarize(n=n()) |> 
+  ungroup() #makes as many variables as you want 
+
+gsi |> 
+  st_drop_geometry() |> 
+  tabyl(Barrier, file)
+
+gsi |> 
+  st_drop_geometry() |> 
+  tabyl(sidewalk_w, file)
 
 ```
 
-
-## B Parks
+## E Parks
 ```{r}
 
 (parks <- st_read('input_data/NewHavenParksLayers_08032021/NewHavenParks.shp'))
@@ -432,9 +529,7 @@ mapview(parks) +
 
 ```
 
-
-
-# parcels
+## F Parcels
 ```{r}
 
 list.files('../GSI STEWARDSHIP Project_data_too_big/')
@@ -447,9 +542,23 @@ parcels <-
 
 ```
 
+# Miscellaneous
+```{r}
+
+
+st_layers('../GSI STEWARDSHIP Project_data_too_big/City_layers.gdb')
+
+thing <- st_read(
+  '../GSI STEWARDSHIP Project_data_too_big/City_layers.gdb', 'NH_Publishing_SDE_DBO_NH_2016_Paved_Unpaved_Surfaces_Poly')
+
+thing2 <- st_read(
+  '../GSI STEWARDSHIP Project_data_too_big/City_layers.gdb', 'NH_Publishing_SDE_DBO_NH_2016_Structures_Poly')
+
+mapview(thing2)
+```
 
 # OLD BELOW
-## C GSI: URI - already folded into city data: NO NEED TO USE
+## GSI: URI - already folded into city data: NO NEED TO USE
 ```{r eval=FALSE, include=FALSE}
 
 # Downtown only from the siting process
@@ -497,65 +606,6 @@ gsi <-
 mapview(gsi, zcol = 'file')
 
 ```
-
-
-
-
-
-
-# exploratory
-```{r}
-gsi |> glimpse()
-
-gsi |> select(GI_Type)
-
-gsi |> 
-  st_drop_geometry() |> #removes sticky geometries
-  tabyl(file)
-
-gsi |> 
-  st_drop_geometry() |> #removes sticky geometries
-  tabyl(curb_type, file)
-
-gsi |> 
-  st_drop_geometry() |> 
-  tabyl(file, Install_Year,Fencing) |> 
-  bind_rows(.id = "file") #counts number of GSI that meets the following conditions
-
-gsi |> 
-  st_drop_geometry() |> 
-  group_by(file, Install_Year, Fencing) |> 
-  summarize(n=n()) |> 
-  ungroup() #makes as many variables as you want 
-
-gsi |> 
-  st_drop_geometry() |> 
-  tabyl(Barrier, file)
-
-gsi |> 
-  st_drop_geometry() |> 
-  tabyl(sidewalk_w, file)
-
-
-```
-
-
-
-```{r}
-
-
-st_layers('../GSI STEWARDSHIP Project_data_too_big/City_layers.gdb')
-
-thing <- st_read(
-  '../GSI STEWARDSHIP Project_data_too_big/City_layers.gdb', 'NH_Publishing_SDE_DBO_NH_2016_Paved_Unpaved_Surfaces_Poly')
-
-thing2 <- st_read(
-  '../GSI STEWARDSHIP Project_data_too_big/City_layers.gdb', 'NH_Publishing_SDE_DBO_NH_2016_Structures_Poly')
-
-mapview(thing2)
-```
-
-
 
 
 
