@@ -61,7 +61,9 @@ mapview(neighs, alpha.regions = 0, lwd = 2) + mapview(sheds, zcol = 'Name')
 
 zoning <- 
   st_read('../GSI STEWARDSHIP Project_data_too_big/_ags_data0AA96A07DF994B819C3A75306E2DD073.gdb') |> 
-  st_transform(st_crs(neighs))
+  st_transform(st_crs(neighs)) |> 
+  select(-shape_Length,-shape_Area) %>%
+  mutate(area_m2=as.double(st_area(.)))
 
 zoning |> glimpse()
 zoning |> mapview(zcol = 
@@ -70,6 +72,20 @@ zoning |> mapview(zcol =
                     # 'district_category'
                   )
 
+#How much area is in each zone?
+zoning |> 
+  st_drop_geometry() |> 
+  group_by(districts) |> 
+  summarize(total_area=sum(area_m2)
+            ,n=n()
+            , mean_area=mean(area_m2)
+            , median_area=median(area_m2)
+            , sd_area=sd(area_m2)) |> 
+  arrange(desc(total_area)) 
+
+zoning |> 
+  filter(districts == "Residence Districts") |> 
+  mapview()
 
 ```
 
