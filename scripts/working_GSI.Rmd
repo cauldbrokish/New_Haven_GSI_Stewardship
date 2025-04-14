@@ -227,28 +227,8 @@ inspection_long |>
 
 ```
 
-# 2 Link recent inspections to inlets
-```{r}
-# inlets dont change. they have fixed locations with non-changing attributes
-# inspections (which has condition) DOES change, hence recent_inspections
 
-inlet_recent_inspection <- 
-  inlet |> 
-  left_join(
-    recent_inspections |> select(GlobalID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
-    , by = c('GlobalID' = 'ASSETGUID') )
-
-# double check
-inlet_recent_inspection |> glimpse()
-
-inlet_recent_inspection |> 
-  st_drop_geometry() |> 
-  group_by(Condition, islegit) |> 
-  count()
-
-```
-
-# 3 Exploratory
+# 2 Exploratory
 ## A Inspection Frequencies
 ```{r}
 
@@ -415,7 +395,29 @@ neighs |>
 neighs |> mapview()
 ```
 
-## C Inspection Analysis w/ Watersheds and Zoning Layers 
+## C Link recent inspections to inlets
+```{r}
+# inlets dont change. they have fixed locations with non-changing attributes
+# inspections (which has condition) DOES change, hence recent_inspections
+
+inlet_recent_inspection <- 
+  inlet |> 
+  left_join(
+    recent_inspections |> select(GlobalID, ASSETGUID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
+    , by = c('GlobalID' = 'ASSETGUID') )
+
+# double check
+inlet_recent_inspection |> glimpse()
+
+inlet_recent_inspection |> 
+  st_drop_geometry() |> 
+  group_by(Condition, islegit) |> 
+  count()
+
+```
+
+
+## D Inspection Analysis w/ Watersheds and Zoning Layers 
 ```{r}
 # Watershed Condition Tibble - Cove River watershed has the greatest variety of assessments; mostly poor or NA in all other watersheds
 inlet_recent_inspection |> 
@@ -479,7 +481,7 @@ inlet_recent_inspection |>
 # How to create graphs with more than two variables? 
 ```
 
-## D Chart Design
+## E Chart Design
 ```{r}
 gsi |> glimpse()
 
@@ -514,7 +516,7 @@ gsi |>
 
 ```
 
-## E Parks
+## F Parks
 ```{r}
 
 (parks <- st_read('input_data/NewHavenParksLayers_08032021/NewHavenParks.shp'))
@@ -528,7 +530,7 @@ mapview(parks) +
 
 ```
 
-## F Parcels
+## G Parcels
 ```{r}
 
 list.files('../GSI STEWARDSHIP Project_data_too_big/')
