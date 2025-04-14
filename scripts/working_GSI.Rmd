@@ -236,8 +236,7 @@ inlet_recent_inspection <-
   inlet |> 
   left_join(
     recent_inspections |> select(GlobalID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
-    , by = c('FACILITYID' = 'FACILITYID') # not perfect like Dawn said
-    )
+    , by = c('GlobalID' = 'ASSETGUID') )
 
 # double check
 inlet_recent_inspection |> glimpse()
