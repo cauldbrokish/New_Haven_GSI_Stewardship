@@ -34,7 +34,7 @@ vapply(packs, library, character.only = TRUE, logical(1),
 ```
 
 
-# 1 read in data
+# 1 Read in data
 ## A Neighborhoods
 ```{r}
 
@@ -91,7 +91,7 @@ zoning |>
 
 
 
-## C GSI: City of New Haven
+## C Data Transformation
 ```{r}
 
 list.files('../GSI STEWARDSHIP Project_data_too_big')
@@ -99,6 +99,7 @@ list.files('../GSI STEWARDSHIP Project_data_too_big')
 #stlayers is like list.files but for .gdb files
 st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
 
+# Join neighborhoods, watersheds, and zoning in one chart called Inlet
 inlet <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'inlet'
@@ -113,12 +114,13 @@ inlet <-
 
 # did those joins work?
 
-
+# MapView
 mapviewOptions(
     legend.pos = 'bottomleft'
   , layers.control.pos = 'topright'
   )
 
+# Viewing all the inlets at once by neighborhood, zone, and watershed 
 m_neigh <- inlet |> mapview(zcol = 'Neighborhood') # TK
 m_water <- inlet |> mapview(zcol = 'watershed')
 m_zone  <- inlet |> mapview(zcol = 'districts')
@@ -165,6 +167,7 @@ inspection |> glimpse()
 # take a look
 inlet |> glimpse() # transpose
 inlet |> mapview(zcol = 'Install_Year')
+inlet |> mapview(zcol = 'Assigned')
 
 inspection |> glimpse()
 
@@ -203,7 +206,7 @@ inlet |>
 inlet |> 
   anti_join(inspection, by = c('GlobalID' = 'GlobalID'))
 
-
+# What is the difference between inspection and inspection_long?
 inspection_long <- 
   inspection |> 
   left_join(
@@ -239,8 +242,6 @@ inspection_long |>
   as_tibble() |> 
   arrange(desc(n)))
 
-# Tabulate the frequency of 
-
 # how often have these been inspected?
 inspection_freq |> summary() # roughly 4x
 
@@ -254,6 +255,12 @@ inspection_freq |> summary() # roughly 4x
 inspection_freq_freq |> plot()
 
 # pre-summarized: geom_col
+inspection_freq |> 
+  ggplot(aes(n, valid_percent)) + #in the aesthetic: map the data visually
+  geom_col() +
+  theme_bw(16) +
+  NULL #NULL shuts down the function above
+
 inspection_freq_freq |> 
   ggplot(aes(n,n_n)) + #in the aesthetic: map the data visually
   geom_col() +
@@ -275,15 +282,36 @@ inspection_freq |>
   theme_bw(16) +
   NULL
 
-
 inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
-
-# FIXME Clare
 
 ```
 
 ## B Data Analysis with Condition, DEBRIS, VEGETATION, OIL
 ```{r}
+# Does the assignment of cleaning duties impact the condition of the bioswales?
+inspection_long |> 
+  group_by(Assigned, Condition) |> 
+  count() |> 
+  ggplot(aes(Condition, n)) + # How do you change the label from "n" back to "Assigned"?
+  geom_col() + 
+  facet_wrap(~Assigned, scales="free") +
+ NULL
+
+inspection_long |> 
+  group_by(Assigned, Condition) |> 
+  count('Routine Cleaning') |> # How do you just count the number of variables within a column/category? 
+  ggplot(aes(n, Condition)) + 
+  geom_col() + 
+  facet_wrap(~Assigned, scales="free") +
+NULL
+
+inspection_long |> # How to lengthen the y-axis variables on this graph? 
+  ggplot(aes(Condition, Neighborhood)) +
+  geom_col() +
+  facet_wrap(~watershed, scales = "free") + # Would like to represent watersheds or neighborhoods in a color instead of in facet_wrap. . .
+  theme_bw() + 
+NULL 
+  
 recent_inspections <- 
   inspection |> 
   group_by(ASSETGUID) |> 
@@ -313,9 +341,6 @@ recent_inspections |>
   geom_col() + 
   facet_wrap(~islegit, scales="free") + 
   NULL
-
-# Repeat above code using debris, vegetation, and oil variables 
-# repeat the lines above, but use DEBRIS, VEGTATION, OIL, and/or FRAME columns
 
 # Debris Tibble - the bioswales without debris were in poor, very poor, unknown condition 
 recent_inspections |> 
