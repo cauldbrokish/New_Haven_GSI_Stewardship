@@ -215,7 +215,7 @@ inspection_long <-
 
 ### 1 Analysis 
 ```{r}
-# 4.21 Playing with the categories of assigned
+# Playing with the categories of assigned
 inspection_long |> 
   tabyl(Assigned) |> 
   as_tibble()
@@ -227,8 +227,15 @@ inspection_long |>
   theme_linedraw() + 
   NULL 
 
+inspection_long |> 
+  group_by(DEBRIS, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~DEBRIS, scales="free") + 
+  NULL
+  
 # 4.21 How to organize Assigned by watershed, neighborhood, or district? 
-# Does tabyl just take one variable? 
 inspection_long |> 
   tabyl(Neighborhood, Assigned) |> 
   as_tibble()
@@ -255,6 +262,14 @@ inspection_long |>
   geom_line(alpha = .2) +
   theme_bw(16) +
   NULL
+
+# FIX ME
+inspection_long |> 
+  group_by(districts, watershed) |> 
+  count(districts) |> 
+  ggplot(aes(districts, n)) +
+  geom_bar() +
+  facet_wrap(~watershed)
 
 ```
 
@@ -285,7 +300,6 @@ recent_inspections |>
 
 ### 1 Analysis 
 ```{r}
-# 4.21 How to change EditDate to shorten to just the years (or months) and recognize the dates as individual entities? Do we pivot_longer()?
 recent_inspections |> 
   tabyl(edit_date)  |> 
   as_tibble() |> 
@@ -391,7 +405,7 @@ inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
 
 ## B Data Analysis with Condition, DEBRIS, VEGETATION, OIL
 ```{r}
-# 4.21 Does the assignment of cleaning duties impact the condition of the bioswales?
+# Does the assignment of cleaning impact the condition of the bioswales?
 inspection_long |> 
   group_by(Assigned, Condition) |> 
   count() |> 
@@ -405,15 +419,19 @@ inspection_long |>
   count('Routine Cleaning') |> # How do you just count the number of variables within a column/category? 
   ggplot(aes(n, Condition)) + 
   geom_col() + 
-  facet_wrap(~Assigned, scales="free") +
+  facet_wrap(~Assigned, scales="free") 
 NULL
+
+#ggsave( filename = paste0('figures/Assigned_Condition', Sys.Date(), '.png'))
 
 inspection_long |> # How to lengthen the y-axis variables on this graph? 
   ggplot(aes(Condition, fill = Neighborhood)) +
   geom_bar() +
-  facet_wrap(~watershed, scales = "free_y") + # Would like to represent watersheds or neighborhoods in a color instead of in facet_wrap. . .
+  facet_wrap(~watershed, scales = "free_y") + 
   theme_bw() + 
 NULL 
+
+ggsave(filename = paste0('figures/Neighborhood_Condition', Sys.Date(), '.png'))
 
 inspection_long |> # How to lengthen the y-axis variables on this graph? 
   ggplot(aes(Condition)) +
@@ -422,8 +440,18 @@ inspection_long |> # How to lengthen the y-axis variables on this graph?
   theme_bw() + 
 NULL 
 
-# 4.21 Trying to visualize the condition of Recent_Inspections by edit date using facet_wrap to visualize a third variable 
+# Visualizing the condition of Recent_Inspections by edit date using facet_wrap to visualize a third variable 
 inspection_long |> 
+  group_by(edit_month, Condition) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() +
+  theme_bw(16) + 
+  facet_wrap(~edit_month, nrow=3) + #ncol=x only creates x number of columns; same with nrow
+  NULL
+
+# Most inspections occur April through July 
+recent_inspections |> 
   group_by(edit_month, Condition) |> 
   summarize(n=n()) |> 
   ggplot(aes(n, Condition)) +
@@ -443,7 +471,7 @@ recent_inspections |>
   facet_wrap(~islegit, scales="free") + 
   NULL
 
-# Debris Tibble - the bioswales without debris were in poor, very poor, unknown condition 
+# Debris - the bioswales without debris were in poor, very poor, unknown condition (most bioswales had debris) 
 recent_inspections |> 
   group_by(DEBRIS, Condition) |> 
   count() |> 
@@ -452,12 +480,17 @@ recent_inspections |>
   facet_wrap(~DEBRIS, scales="free") + 
   NULL
 
-# (recent_inspections <- # Is there a difference between inspections and recent_inspections?
-  recent_inspections |> 
-    tabyl(DEBRIS) |> 
+recent_inspections |> 
+  tabyl(DEBRIS) |> 
   as_tibble() |> 
   arrange(desc(n))
-  # )
+  
+recent_inspections |> 
+  group_by(DEBRIS, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = DEBRIS)) + 
+  geom_col() + 
+  theme_linedraw()
   
 # The only bioswales with debris in them were assessed in a "poor", "very poor", and "NA" condition  
 recent_inspections |> 
@@ -566,7 +599,7 @@ inlet_recent_inspection |>
 inlet_recent_inspection |> 
   mapview()
 
-# Zoning Condition Tibble - NA for most districts but residential (No assessments in other zoning districts?)
+# Zoning Condition - NA for most districts but residential (No assessments in other zoning districts?)
 inlet_recent_inspection |> 
   group_by(districts, Condition) |> 
   count() |> 
@@ -603,6 +636,8 @@ inlet_recent_inspection |>
 
 ## D Chart Design
 ```{r}
+# The following uses a dataset, gsi, that is no longer present 
+
 gsi |> glimpse()
 
 gsi |> select(GI_Type)
