@@ -72,26 +72,9 @@ zoning |> mapview(zcol =
                     # 'district_category'
                   )
 
-#How much area is in each zone?
-zoning |> 
-  st_drop_geometry() |> 
-  group_by(districts) |> 
-  summarize(total_area=sum(area_m2)
-            ,n=n()
-            , mean_area=mean(area_m2)
-            , median_area=median(area_m2)
-            , sd_area=sd(area_m2)) |> 
-  arrange(desc(total_area)) 
-
-zoning |> 
-  filter(districts == "Residence Districts") |> 
-  mapview()
-
 ```
 
-
-
-## C Data Transformation
+# 2 Data Transformation
 ```{r}
 
 list.files('../GSI STEWARDSHIP Project_data_too_big')
@@ -99,6 +82,10 @@ list.files('../GSI STEWARDSHIP Project_data_too_big')
 #stlayers is like list.files but for .gdb files
 st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
 
+```
+
+## A Inlet
+```{r}
 # Join neighborhoods, watersheds, and zoning in one chart called Inlet
 inlet <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
@@ -127,6 +114,16 @@ m_zone  <- inlet |> mapview(zcol = 'districts')
 
 leafsync::sync(m_neigh, m_water, m_zone)
 
+# take a look
+inlet |> glimpse() # transpose
+inlet |> mapview(zcol = 'Install_Year')
+inlet |> mapview(zcol = 'Assigned')
+
+```
+
+## B Inspection
+```{r}
+# Create tibble with inspection results, beginning with condition 
 inspection <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'GI_Inspection'
@@ -163,14 +160,6 @@ inspection |> glimpse()
 #           , 'GI_Inspection__ATTACH'
 #           , as_tibble = TRUE)
 
-
-# take a look
-inlet |> glimpse() # transpose
-inlet |> mapview(zcol = 'Install_Year')
-inlet |> mapview(zcol = 'Assigned')
-
-inspection |> glimpse()
-
 # is the unique ID really unique? 
 all.equal(
   inspection |> distinct(GlobalID) |> nrow()
@@ -189,7 +178,12 @@ all.equal(
 # inlet # GlobalID
 # inspection # ASSETGUID and GlobalID
 
-# THIS WORKS
+```
+
+## C Inspection_Long
+```{r}
+# Join inspections and inlets by FACILITYID and GlobalID to create a tibble with condition, neighborhood, watershed, and zone
+
 # FACILITYID is what to use?
 inlet |> 
   left_join(inspection, by = c('GlobalID' = 'GlobalID')) # or ASSETGUID
@@ -202,17 +196,45 @@ inlet |> # missing records are a known error
 inlet |> 
   anti_join(inspection, by = 'FACILITYID')
 
-
 inlet |> 
   anti_join(inspection, by = c('GlobalID' = 'GlobalID'))
 
-# What is the difference between inspection and inspection_long?
 inspection_long <- 
   inspection |> 
   left_join(
     inlet |> select(-c(CreationDate, EditDate, Creator, Editor))
               , by = c('FACILITYID' = 'FACILITYID')) |> 
   select(GlobalID.x, GlobalID.y, everything()) 
+
+```
+
+### 1 Analysis 
+```{r}
+# 4.21 Playing with the categories of assigned
+inspection_long |> 
+  tabyl(Assigned) |> 
+  as_tibble()
+
+inspection_long |> 
+  tabyl(Assigned) |> 
+  ggplot(aes(n, Assigned)) +
+  geom_col() + 
+  theme_linedraw() + 
+  NULL 
+
+# 4.21 How to organize Assigned by watershed, neighborhood, or district? 
+# Does tabyl just take one variable? 
+inspection_long |> 
+  tabyl(Neighborhood, Assigned) |> 
+  as_tibble()
+
+inspection_long |> 
+  tabyl(Neighborhood, Assigned) |> 
+  ggplot(aes(n, Neighborhood)) +
+  geom_col() + 
+  theme_linedraw() + 
+  facet_wrap(~Assigned)
+  NULL 
 
 inspection_long |>
   ggplot(aes(EditDate, Condition, group = ASSETGUID)) +
@@ -230,8 +252,66 @@ inspection_long |>
 
 ```
 
+## D Recent_Inspections
+```{r}
+# Arranges Inspections by date
+  
+recent_inspections <- 
+  inspection |> 
+  group_by(ASSETGUID) |> 
+  arrange(EditDate) |> 
+  slice(1) |> # slice_max, slice_min instead of arrange |> slice 
+  ungroup()
+  
+recent_inspections |> 
+  tabyl(Condition) |> 
+  ggplot(aes(Condition, n)) +
+  geom_col()
 
-# 2 Exploratory
+recent_inspections |> 
+  tabyl(CONDITION)
+
+recent_inspections |> 
+  tabyl(CONDITION) |> 
+  as_tibble()
+
+```
+
+### 1 Analysis 
+```{r}
+# 4.21 How to change EditDate to shorten to just the years (or months) and recognize the dates as individual entities? Do we pivot_longer()?
+recent_inspections |> 
+  tabyl(EditDate)  |> 
+  as_tibble()
+
+```
+
+## E Inlet_Recent_Inspection
+```{r}
+# inlets dont change. they have fixed locations with non-changing attributes
+# inspections (which has condition) DOES change, hence recent_inspections
+
+inlet_recent_inspection <- 
+  inlet |> 
+  left_join(
+    recent_inspections |> select(GlobalID, ASSETGUID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
+    , by = c('GlobalID' = 'ASSETGUID') )
+
+# double check
+inlet_recent_inspection |> glimpse()
+
+```
+
+### Analysis 
+```{r}
+inlet_recent_inspection |> 
+  st_drop_geometry() |> 
+  group_by(Condition, islegit) |> 
+  count()
+
+```
+
+# 3 Exploratory
 ## A Inspection Frequencies
 ```{r}
 
@@ -243,7 +323,8 @@ inspection_long |>
   arrange(desc(n)))
 
 # how often have these been inspected?
-inspection_freq |> summary() # roughly 4x
+inspection_freq |> 
+  summary() # roughly 4x
 
 # what's the distribution of frequencies?
 (inspection_freq_freq <- 
@@ -288,7 +369,7 @@ inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
 
 ## B Data Analysis with Condition, DEBRIS, VEGETATION, OIL
 ```{r}
-# Does the assignment of cleaning duties impact the condition of the bioswales?
+# 4.21 Does the assignment of cleaning duties impact the condition of the bioswales?
 inspection_long |> 
   group_by(Assigned, Condition) |> 
   count() |> 
@@ -311,25 +392,15 @@ inspection_long |> # How to lengthen the y-axis variables on this graph?
   facet_wrap(~watershed, scales = "free") + # Would like to represent watersheds or neighborhoods in a color instead of in facet_wrap. . .
   theme_bw() + 
 NULL 
-  
-recent_inspections <- 
-  inspection |> 
-  group_by(ASSETGUID) |> 
-  arrange(EditDate) |> 
-  slice(1) |> # slice_max, slice_min instead of arrange |> slice 
-  ungroup()
-  
-recent_inspections |> 
-  tabyl(Condition) |> 
-  ggplot(aes(Condition, n)) +
-  geom_col()
 
+# 4.21 Trying to visualize the condition of Recent_Inspections by edit date using facet_wrap to visualize a third variable - NEEDS HELP
 recent_inspections |> 
-  tabyl(CONDITION)
-
-recent_inspections |> 
-  tabyl(CONDITION) |> 
-  as_tibble()
+  group_by(EditDate, Condition) |> 
+  ggplot(aes(n, Condition)) |> 
+  geom_col() +
+  theme_bw(16) + 
+  facet_wrap(~EditDate, scales = 'free') + 
+  NULL
 
 # try help(factor) to learn more about setting the levels of a factor
 # to make them appear in order (we do NOT need an ordered factor)
@@ -420,30 +491,24 @@ neighs |>
 neighs |> mapview()
 ```
 
-## C Link recent inspections to inlets
+## C Inspection Analysis w/ Watersheds and Zoning Layers 
 ```{r}
-# inlets dont change. they have fixed locations with non-changing attributes
-# inspections (which has condition) DOES change, hence recent_inspections
 
-inlet_recent_inspection <- 
-  inlet |> 
-  left_join(
-    recent_inspections |> select(GlobalID, ASSETGUID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
-    , by = c('GlobalID' = 'ASSETGUID') )
-
-# double check
-inlet_recent_inspection |> glimpse()
-
-inlet_recent_inspection |> 
+#How much area is in each zone?
+zoning |> 
   st_drop_geometry() |> 
-  group_by(Condition, islegit) |> 
-  count()
+  group_by(districts) |> 
+  summarize(total_area=sum(area_m2)
+            ,n=n()
+            , mean_area=mean(area_m2)
+            , median_area=median(area_m2)
+            , sd_area=sd(area_m2)) |> 
+  arrange(desc(total_area)) 
 
-```
+zoning |> 
+  filter(districts == "Residence Districts") |> 
+  mapview()
 
-
-## D Inspection Analysis w/ Watersheds and Zoning Layers 
-```{r}
 # Watershed Condition Tibble - Cove River watershed has the greatest variety of assessments; mostly poor or NA in all other watersheds
 inlet_recent_inspection |> 
   group_by(watershed, Condition) |> 
@@ -506,7 +571,7 @@ inlet_recent_inspection |>
 # How to create graphs with more than two variables? 
 ```
 
-## E Chart Design
+## D Chart Design
 ```{r}
 gsi |> glimpse()
 
@@ -541,7 +606,7 @@ gsi |>
 
 ```
 
-## F Parks
+## E Parks
 ```{r}
 
 (parks <- st_read('input_data/NewHavenParksLayers_08032021/NewHavenParks.shp'))
@@ -555,7 +620,7 @@ mapview(parks) +
 
 ```
 
-## G Parcels
+## F Parcels
 ```{r}
 
 list.files('../GSI STEWARDSHIP Project_data_too_big/')
