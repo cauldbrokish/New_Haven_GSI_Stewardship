@@ -41,11 +41,11 @@ vapply(packs, library, character.only = TRUE, logical(1),
 (neighs <- 
    st_read('input_data/New_Haven_Neighborhoods/Neighborhood.shp', as_tibble = TRUE) |> 
    select(Neighborhood = Neighbor_1) |> 
-   st_transform(3857)
+   st_transform(3857) %>%
+   mutate(area_m2=as.double(st_area(.)))
  )
 
-
-neighs |> mapview()
+neighs |> mapview(zcol = "area_m2")
 ```
 
 ## B watersheds and zonning
@@ -132,7 +132,12 @@ mutate(Condition=factor(CONDITION,
     levels=c("Unknown", NA, "Very Poor", "Poor", "Fair", "Good", "Very Good", "Excellent"))
   , islegit=ifelse(Condition=="Unknown" | is.na(Condition)
                    , "notlegit"
-                   , "legit"))
+                   , "legit"), 
+  edit_year = lubridate::year(EditDate), 
+    edit_month = lubridate::month(EditDate),
+    edit_date = lubridate::date(EditDate)
+  ) |>
+  select(-EditDate) 
 
 # parcels <- 
 #   st_read('/Users/dlocke/URI_data/Connecticut_Parcels.gdb', 'deepgis_DEEP_PARCEL') |> 
@@ -229,11 +234,12 @@ inspection_long |>
   as_tibble()
 
 inspection_long |> 
-  tabyl(Neighborhood, Assigned) |> 
-  ggplot(aes(n, Neighborhood)) +
-  geom_col() + 
-  theme_linedraw() + 
-  facet_wrap(~Assigned)
+  group_by(Neighborhood, Assigned) |> #group_by is better than tabyl for more than 2 variables
+  count() |> 
+  ggplot(aes(n, Neighborhood, fill = Assigned)) +
+  geom_col(position = "dodge") + 
+  theme_linedraw() +
+  #facet_wrap(~Assigned) + 
   NULL 
 
 inspection_long |>
@@ -254,12 +260,12 @@ inspection_long |>
 
 ## D Recent_Inspections
 ```{r}
-# Arranges Inspections by date
+# Arranges only the most recent inspections for each inlet
   
 recent_inspections <- 
   inspection |> 
   group_by(ASSETGUID) |> 
-  arrange(EditDate) |> 
+  arrange(edit_date) |> 
   slice(1) |> # slice_max, slice_min instead of arrange |> slice 
   ungroup()
   
@@ -281,8 +287,24 @@ recent_inspections |>
 ```{r}
 # 4.21 How to change EditDate to shorten to just the years (or months) and recognize the dates as individual entities? Do we pivot_longer()?
 recent_inspections |> 
-  tabyl(EditDate)  |> 
-  as_tibble()
+  tabyl(edit_date)  |> 
+  as_tibble() |> 
+  ggplot(aes(edit_date, n)) +
+  geom_point() + 
+  geom_line() +
+  geom_smooth()
+
+# Most inspections occur in April and May 
+recent_inspections |> 
+  tabyl(edit_month)  |> 
+  as_tibble() |> 
+  ggplot(aes(edit_month, n)) +
+  geom_point() + 
+  geom_line() +
+  geom_smooth()
+
+recent_inspections |> 
+  group_by(neighs)
 
 ```
 
@@ -387,19 +409,27 @@ inspection_long |>
 NULL
 
 inspection_long |> # How to lengthen the y-axis variables on this graph? 
-  ggplot(aes(Condition, Neighborhood)) +
-  geom_col() +
-  facet_wrap(~watershed, scales = "free") + # Would like to represent watersheds or neighborhoods in a color instead of in facet_wrap. . .
+  ggplot(aes(Condition, fill = Neighborhood)) +
+  geom_bar() +
+  facet_wrap(~watershed, scales = "free_y") + # Would like to represent watersheds or neighborhoods in a color instead of in facet_wrap. . .
   theme_bw() + 
 NULL 
 
-# 4.21 Trying to visualize the condition of Recent_Inspections by edit date using facet_wrap to visualize a third variable - NEEDS HELP
-recent_inspections |> 
-  group_by(EditDate, Condition) |> 
-  ggplot(aes(n, Condition)) |> 
+inspection_long |> # How to lengthen the y-axis variables on this graph? 
+  ggplot(aes(Condition)) +
+  geom_bar() +
+  facet_grid(Neighborhood~watershed, scales = "free_y") + # Would like to represent watersheds or neighborhoods in a color instead of in facet_wrap. . .
+  theme_bw() + 
+NULL 
+
+# 4.21 Trying to visualize the condition of Recent_Inspections by edit date using facet_wrap to visualize a third variable 
+inspection_long |> 
+  group_by(edit_month, Condition) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(n, Condition)) +
   geom_col() +
   theme_bw(16) + 
-  facet_wrap(~EditDate, scales = 'free') + 
+  facet_wrap(~edit_month, nrow=3) + #ncol=x only creates x number of columns; same with nrow
   NULL
 
 # try help(factor) to learn more about setting the levels of a factor
