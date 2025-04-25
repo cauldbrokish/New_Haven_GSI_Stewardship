@@ -97,7 +97,14 @@ inlet <-
                     ) |> 
   st_intersection(zoning |> 
                     select(zone_code, districts, district_category)
-                  )
+                  ) |> 
+  mutate(edit_year = lubridate::year(EditDate), 
+    edit_month = lubridate::month(EditDate),
+    edit_date = lubridate::date(EditDate), 
+   group_by(districts) |> 
+  mutate(total_area = sum(area_m2),
+    mean_area = mean(area_m2)) |>
+  select(-EditDate)
 
 # did those joins work?
 
@@ -118,6 +125,24 @@ leafsync::sync(m_neigh, m_water, m_zone)
 inlet |> glimpse() # transpose
 inlet |> mapview(zcol = 'Install_Year')
 inlet |> mapview(zcol = 'Assigned')
+
+```
+
+### 1 Analysis
+```{r}
+# What is the distribution of planting plans across the city? 
+
+# Number of planting plans 
+# HelpMe_Dexter: it seems like the responses in the Planting_Plan column have a variety of different names but are all some variation of "sun" or "shade". How do I mutate the Inlet dataset to make these responses all uniform: sun/shade?
+inlet |> 
+ tabyl(Planting_Plan) |> 
+  ggplot(aes(percent, Planting_Plan)) +
+  geom_bar() + 
+  theme_linedraw()
+
+# Number of planting plans by watershed or neighborhood or business district?
+
+# What is the distribution of planting plans assigned "emergency cleaning" vs "routine cleaning"? 
 
 ```
 
@@ -207,9 +232,21 @@ inlet |>
 inspection_long <- 
   inspection |> 
   left_join(
-    inlet |> select(-c(CreationDate, EditDate, Creator, Editor))
+    inlet |> select(-c(CreationDate, edit_date, Creator, Editor))
               , by = c('FACILITYID' = 'FACILITYID')) |> 
-  select(GlobalID.x, GlobalID.y, everything()) 
+  select(GlobalID.x, GlobalID.y, everything()) |> 
+  group_by(districts) |> 
+  mutate(total_area = sum(area_m2),
+    mean_area = mean(area_m2))
+
+inspection_long |> 
+  group_by(districts) |> 
+  summarize(total_area=sum(area_m2)
+            ,n=n()
+            , mean_area=mean(area_m2)
+            , median_area=median(area_m2)
+            , sd_area=sd(area_m2)) |> 
+  arrange(desc(total_area)) 
 
 ```
 
@@ -235,35 +272,78 @@ inspection_long |>
   facet_wrap(~DEBRIS, scales="free") + 
   NULL
   
-# 4.21 How to organize Assigned by watershed, neighborhood, or district? 
+# How to organize Assigned by watershed, neighborhood, or district? 
 inspection_long |> 
   tabyl(Neighborhood, Assigned) |> 
   as_tibble()
 
+# HelpME_Dexter: how to account for mean area of a Neighborhood when comparing bioswales across neighborhoods? 
 inspection_long |> 
-  group_by(Neighborhood, Assigned) |> #group_by is better than tabyl for more than 2 variables
+  tabyl(Neighborhood, mean_area) |> 
+  as_tibble()
+
+inspection_long |> 
+  group_by(Neighborhood, Assigned, Condition, islegit) |> #group_by is better than tabyl for more than 2 variables
   count() |> 
-  ggplot(aes(n, Neighborhood, fill = Assigned)) +
+  ggplot(aes(n, Condition, fill = Assigned)) +
   geom_col(position = "dodge") + 
   theme_linedraw() +
-  #facet_wrap(~Assigned) + 
+  facet_wrap(~Neighborhood, scales = 'free') + 
+  #facet_grid(Neighborhood~islegit, scales = 'free')
   NULL 
 
+# Same chart as above, without free scales 
+inspection_long |> 
+  group_by(Neighborhood, Assigned, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = Assigned)) +
+  geom_col() + 
+  theme_linedraw() +
+  facet_wrap(~Neighborhood)
+
+# HelpMe_Dexter: how do I get geom_bar to add n as the y axis variable or at least to count better? 
+inspection_long |> 
+  group_by(watershed) |> 
+  count() |> 
+  ggplot(aes(watershed)) +
+  geom_bar() + 
+  theme_classic()
+
+inspection_long |> 
+  group_by(watershed, Neighborhood) |> 
+  count() |> 
+  ggplot(aes(n, watershed)) +
+  geom_col() + 
+  theme_linedraw() + 
+  facet_wrap(~Neighborhood)
+
+inspection_long |> 
+  group_by(watershed, Assigned, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = Assigned)) +
+  geom_col() + 
+  theme_linedraw() +
+  facet_wrap(~watershed)
+
+ggsave(filename = paste0('figures/inspection_long_Neighborhood_Condition', Sys.Date(), '.png'))
+
+# HelpMe_Dexter: why are the edit_month units in the x-axis so wonky? 
 inspection_long |>
-  ggplot(aes(EditDate, Condition, group = ASSETGUID)) +
-  geom_line(alpha = .2) +
-  facet_wrap(~islegit, scales = 'free') +
-  # facet_wrap(~Planting_Plan, scales = 'free') +
+  ggplot(aes(edit_month, Condition, group = ASSETGUID, fill = Assigned)) +
+  geom_col() +
+  #facet_wrap(~islegit, scales = 'free') +
+  facet_wrap(~Planting_Plan, scales = 'free') +
   NULL
 
+# Same weird x-axis units in this graph too. 
 inspection_long |>
   filter(islegit == 'legit') |> 
-  ggplot(aes(EditDate, Condition, group = ASSETGUID)) +
-  geom_line(alpha = .2) +
+  ggplot(aes(edit_month, Condition, group = ASSETGUID)) +
+  geom_col() +
   theme_bw(16) +
   NULL
 
-# FIX ME
+# HelpMe_Dexter: code does not work 
 inspection_long |> 
   group_by(districts, watershed) |> 
   count(districts) |> 
@@ -324,10 +404,10 @@ recent_inspections |>
 
 ## E Inlet_Recent_Inspection
 ```{r}
-# inlets dont change. they have fixed locations with non-changing attributes
+# inlets don't change. they have fixed locations with non-changing attributes
 # inspections (which has condition) DOES change, hence recent_inspections
 
-inlet_recent_inspection <- 
+inlet_recent_inspections <- 
   inlet |> 
   left_join(
     recent_inspections |> select(GlobalID, ASSETGUID, FACILITYID, DEBRIS, VEGETATION, OIL, Condition, islegit)
@@ -338,15 +418,43 @@ inlet_recent_inspection |> glimpse()
 
 ```
 
-### Analysis 
+### 1 Analysis 
 ```{r}
-inlet_recent_inspection |> 
+inlet_recent_inspections |> 
   st_drop_geometry() |> 
   group_by(Condition, islegit) |> 
   count()
 
-```
+# Most inspections occur April through July 
+inlet_recent_inspections |> 
+  group_by(edit_month, Condition, district_category) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(district_category, n, fill = Condition)) +
+  geom_col() +
+  theme_bw(16) + 
+  facet_wrap(~edit_month, nrow=3) + #ncol=x only creates x number of columns; same with nrow
+  NULL
 
+inlet_recent_inspections |> 
+  group_by(edit_month, district_category) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(edit_month, n, fill = district_category)) +
+  geom_col() +
+  theme_bw(16) + 
+  #facet_wrap(~district_category, nrow=3) + #ncol=x only creates x number of columns; same with nrow
+  NULL
+
+# Group inlet_recent_inspections by district_category 
+inlet_recent_inspections |> 
+  group_by(district_category) |> 
+  count()|> 
+  ggplot(aes(district_category, n)) +
+  geom_col() +
+  theme_bw(16) +
+  theme(axis.text.x=element_text(angle = 90)) + 
+  NULL
+
+```
 # 3 Exploratory
 ## A Inspection Frequencies
 ```{r}
@@ -363,10 +471,10 @@ inspection_freq |>
   summary() # roughly 4x
 
 # what's the distribution of frequencies?
-(inspection_freq_freq <- 
+inspection_freq_freq <- 
   inspection_freq |> 
   tabyl(n) |> 
-  as_tibble())
+  as_tibble()
 
 # Base R plotting tool
 inspection_freq_freq |> plot()
@@ -442,22 +550,12 @@ NULL
 
 # Visualizing the condition of Recent_Inspections by edit date using facet_wrap to visualize a third variable 
 inspection_long |> 
-  group_by(edit_month, Condition) |> 
+  group_by(edit_month.y, Condition) |> 
   summarize(n=n()) |> 
   ggplot(aes(n, Condition)) +
   geom_col() +
   theme_bw(16) + 
-  facet_wrap(~edit_month, nrow=3) + #ncol=x only creates x number of columns; same with nrow
-  NULL
-
-# Most inspections occur April through July 
-recent_inspections |> 
-  group_by(edit_month, Condition) |> 
-  summarize(n=n()) |> 
-  ggplot(aes(n, Condition)) +
-  geom_col() +
-  theme_bw(16) + 
-  facet_wrap(~edit_month, nrow=3) + #ncol=x only creates x number of columns; same with nrow
+  facet_wrap(~edit_month.y, nrow=3) + #ncol=x only creates x number of columns; same with nrow
   NULL
 
 # try help(factor) to learn more about setting the levels of a factor
@@ -541,7 +639,6 @@ recent_inspections |>
   facet_wrap(~FRAME, scales="free") + 
   NULL
 
-
 neighs |> 
   left_join(gsi_per_neigh, by = "Neighborhood") %>%
   mutate(  n = ifelse(is.na(n), 0, n)
@@ -549,7 +646,6 @@ neighs |>
          , gsi_per_area = n / area_m2
          ) |> 
   mapview(zcol = 'gsi_per_area', layer.name = 'GSI counts /<br>neigh area')
-
 
 neighs |> mapview()
 ```
