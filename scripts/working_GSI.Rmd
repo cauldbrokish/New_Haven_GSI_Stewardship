@@ -98,15 +98,22 @@ inlet <-
   st_intersection(zoning |> 
                     select(zone_code, districts, district_category)
                   ) |> 
-  mutate(edit_year = lubridate::year(EditDate), 
-    edit_month = lubridate::month(EditDate),
-    edit_date = lubridate::date(EditDate), 
-   group_by(districts) |> 
-  mutate(total_area = sum(area_m2),
-    mean_area = mean(area_m2)) |>
+  mutate(  edit_year = lubridate::year(EditDate)
+         , edit_month = lubridate::month(EditDate)
+         , edit_date = lubridate::date(EditDate)
+         , sun_vs_shade = str_extract(Planting_Plan, "^[^ ]+") |> str_to_title()
+  ) |> 
+  group_by(districts) |> # FIXME this is making the area by district, is that what you wnat here?
+  mutate(
+      total_area = sum(area_m2)
+    , mean_area = mean(area_m2)
+    ) |>
   select(-EditDate)
 
-# did those joins work?
+# double check
+inlet |>
+  st_drop_geometry() |> 
+  tabyl(Planting_Plan, sun_vs_shade)
 
 # MapView
 mapviewOptions(
@@ -134,10 +141,12 @@ inlet |> mapview(zcol = 'Assigned')
 
 # Number of planting plans 
 # HelpMe_Dexter: it seems like the responses in the Planting_Plan column have a variety of different names but are all some variation of "sun" or "shade". How do I mutate the Inlet dataset to make these responses all uniform: sun/shade?
+# kinda tricky, see above when Inlet is first imported. Not sure about your group_by up there and the intention. It is not wrong, but he logic is not clear either.
 inlet |> 
- tabyl(Planting_Plan) |> 
-  ggplot(aes(percent, Planting_Plan)) +
-  geom_bar() + 
+  st_drop_geometry() |> # don't for get to drop the geometry
+  tabyl(sun_vs_shade) |> 
+  ggplot(aes(percent, sun_vs_shade)) +
+  geom_col() + 
   theme_linedraw()
 
 # Number of planting plans by watershed or neighborhood or business district?
@@ -237,15 +246,16 @@ inspection_long <-
   select(GlobalID.x, GlobalID.y, everything()) |> 
   group_by(districts) |> 
   mutate(total_area = sum(area_m2),
-    mean_area = mean(area_m2))
+         mean_area = mean(area_m2)) |> 
+  ungroup()
 
 inspection_long |> 
   group_by(districts) |> 
-  summarize(total_area=sum(area_m2)
-            ,n=n()
-            , mean_area=mean(area_m2)
-            , median_area=median(area_m2)
-            , sd_area=sd(area_m2)) |> 
+  summarize(  total_area  = sum(area_m2)
+            , n           = n()
+            , mean_area   = mean(area_m2)
+            , median_area = median(area_m2)
+            , sd_area     = sd(area_m2)) |> 
   arrange(desc(total_area)) 
 
 ```
@@ -278,9 +288,26 @@ inspection_long |>
   as_tibble()
 
 # HelpME_Dexter: how to account for mean area of a Neighborhood when comparing bioswales across neighborhoods? 
-inspection_long |> 
+# are you sure you want the inspection_long or inlets here?
+inspection_long |>
   tabyl(Neighborhood, mean_area) |> 
   as_tibble()
+
+(gsi_per_neigh <- 
+  inlet |> 
+  ungroup() |> # not sure why grouped by districts above..
+  st_drop_geometry() |> 
+  group_by(Neighborhood) |> 
+  count())
+
+neighs |> 
+  left_join(gsi_per_neigh, by = 'Neighborhood') |> 
+  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) # we are accounting for NA's
+
+neighs |> 
+  left_join(gsi_per_neigh, by = 'Neighborhood') |> 
+  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) |> # we are accounting for NA's
+  mapview(zcol = 'gsi_per_neigh_area', layer.name = 'gsi_per_neigh_area')
 
 inspection_long |> 
   group_by(Neighborhood, Assigned, Condition, islegit) |> #group_by is better than tabyl for more than 2 variables
@@ -302,11 +329,11 @@ inspection_long |>
   facet_wrap(~Neighborhood)
 
 # HelpMe_Dexter: how do I get geom_bar to add n as the y axis variable or at least to count better? 
-inspection_long |> 
+inspection_long |> # LONG is the repeated measures. So you are really counting INSPECTION, not GSI installations here. Not sure if that is what is sought.
   group_by(watershed) |> 
   count() |> 
-  ggplot(aes(watershed)) +
-  geom_bar() + 
+  ggplot(aes(watershed, n)) + # 'n' was missing
+  geom_col() + 
   theme_classic()
 
 inspection_long |> 
@@ -328,8 +355,10 @@ inspection_long |>
 ggsave(filename = paste0('figures/inspection_long_Neighborhood_Condition', Sys.Date(), '.png'))
 
 # HelpMe_Dexter: why are the edit_month units in the x-axis so wonky? 
+inspection_long |> glimpse() # there is .x and .y from joining with something..up above. So edit_month doesn't exist
 inspection_long |>
-  ggplot(aes(edit_month, Condition, group = ASSETGUID, fill = Assigned)) +
+  # ggplot(aes(edit_month, Condition, group = ASSETGUID, fill = Assigned)) +
+  ggplot(aes(edit_month.x, Condition, group = ASSETGUID, fill = Assigned)) + # edit_month is no longer a date, its a number
   geom_col() +
   #facet_wrap(~islegit, scales = 'free') +
   facet_wrap(~Planting_Plan, scales = 'free') +
@@ -348,7 +377,7 @@ inspection_long |>
   group_by(districts, watershed) |> 
   count(districts) |> 
   ggplot(aes(districts, n)) +
-  geom_bar() +
+  geom_col() + # if geom_bar fails, try geom_col and visa versa
   facet_wrap(~watershed)
 
 ```
