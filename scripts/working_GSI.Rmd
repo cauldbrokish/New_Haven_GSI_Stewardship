@@ -241,22 +241,24 @@ inlet |>
 inspection_long <- 
   inspection |> 
   left_join(
-    inlet |> select(-c(CreationDate, edit_date, Creator, Editor))
-              , by = c('FACILITYID' = 'FACILITYID')) |> 
-  select(GlobalID.x, GlobalID.y, everything()) |> 
-  group_by(districts) |> 
-  mutate(total_area = sum(area_m2),
-         mean_area = mean(area_m2)) |> 
-  ungroup()
+    inlet |> select(-c(CreationDate, edit_date, Creator, Editor, edit_year, edit_month, GlobalID))
+              , by = c('FACILITYID' = 'FACILITYID'))
 
-inspection_long |> 
+
+
+n_gsi_district <- 
+  inlet |> 
   group_by(districts) |> 
-  summarize(  total_area  = sum(area_m2)
+  summarize(  #total_area  = sum(area_m2)
             , n           = n()
-            , mean_area   = mean(area_m2)
-            , median_area = median(area_m2)
-            , sd_area     = sd(area_m2)) |> 
-  arrange(desc(total_area)) 
+            ) |> 
+  st_drop_geometry()
+
+zoning |> 
+  group_by(districts) |> 
+  summarise(district_area_m2 = sum(area_m2)) |> 
+  left_join(n_gsi_district, by = 'districts') |> 
+  mutate(gsi_per_district = ifelse())
 
 ```
 
@@ -298,7 +300,7 @@ inspection_long |>
   ungroup() |> # not sure why grouped by districts above..
   st_drop_geometry() |> 
   group_by(Neighborhood) |> 
-  count())
+  count(name))
 
 neighs |> 
   left_join(gsi_per_neigh, by = 'Neighborhood') |> 
