@@ -102,13 +102,7 @@ inlet <-
          , edit_month = lubridate::month(EditDate)
          , edit_date = lubridate::date(EditDate)
          , sun_vs_shade = str_extract(Planting_Plan, "^[^ ]+") |> str_to_title()
-  ) |> 
-  group_by(districts) |> # FIXME this is making the area by district, is that what you wnat here?
-  mutate(
-      total_area = sum(area_m2)
-    , mean_area = mean(area_m2)
-    ) |>
-  select(-EditDate)
+  ) 
 
 # double check
 inlet |>
@@ -258,7 +252,7 @@ zoning |>
   group_by(districts) |> 
   summarise(district_area_m2 = sum(area_m2)) |> 
   left_join(n_gsi_district, by = 'districts') |> 
-  mutate(gsi_per_district = ifelse())
+  mutate(gsi_per_district_area = ifelse(is.na(n), 0, n/district_area_m2))
 
 ```
 
@@ -291,16 +285,13 @@ inspection_long |>
 
 # HelpME_Dexter: how to account for mean area of a Neighborhood when comparing bioswales across neighborhoods? 
 # are you sure you want the inspection_long or inlets here?
-inspection_long |>
-  tabyl(Neighborhood, mean_area) |> 
-  as_tibble()
 
 (gsi_per_neigh <- 
   inlet |> 
   ungroup() |> # not sure why grouped by districts above..
   st_drop_geometry() |> 
   group_by(Neighborhood) |> 
-  count(name))
+  count())
 
 neighs |> 
   left_join(gsi_per_neigh, by = 'Neighborhood') |> 
@@ -354,13 +345,13 @@ inspection_long |>
   theme_linedraw() +
   facet_wrap(~watershed)
 
-ggsave(filename = paste0('figures/inspection_long_Neighborhood_Condition', Sys.Date(), '.png'))
+#ggsave(filename = paste0('figures/inspection_long_Neighborhood_Condition', Sys.Date(), '.png'))
 
 # HelpMe_Dexter: why are the edit_month units in the x-axis so wonky? 
 inspection_long |> glimpse() # there is .x and .y from joining with something..up above. So edit_month doesn't exist
 inspection_long |>
   # ggplot(aes(edit_month, Condition, group = ASSETGUID, fill = Assigned)) +
-  ggplot(aes(edit_month.x, Condition, group = ASSETGUID, fill = Assigned)) + # edit_month is no longer a date, its a number
+  ggplot(aes(edit_month, Condition, group = ASSETGUID, fill = Assigned)) + # edit_month is no longer a date, its a number
   geom_col() +
   #facet_wrap(~islegit, scales = 'free') +
   facet_wrap(~Planting_Plan, scales = 'free') +
@@ -561,7 +552,7 @@ inspection_long |>
   facet_wrap(~Assigned, scales="free") 
 NULL
 
-#ggsave( filename = paste0('figures/Assigned_Condition', Sys.Date(), '.png'))
+###ggsave( filename = paste0('figures/Assigned_Condition', Sys.Date(), '.png'))
 
 inspection_long |> # How to lengthen the y-axis variables on this graph? 
   ggplot(aes(Condition, fill = Neighborhood)) +
@@ -570,7 +561,7 @@ inspection_long |> # How to lengthen the y-axis variables on this graph?
   theme_bw() + 
 NULL 
 
-ggsave(filename = paste0('figures/Neighborhood_Condition', Sys.Date(), '.png'))
+##ggsave(filename = paste0('figures/Neighborhood_Condition', Sys.Date(), '.png'))
 
 inspection_long |> # How to lengthen the y-axis variables on this graph? 
   ggplot(aes(Condition)) +
@@ -635,7 +626,7 @@ recent_inspections |>
   NULL
 
 # # Saving charts as .png files in "figures" folder 
-# ggsave( filename = paste0('figures/Debris_Condition_', Sys.Date(), '.png'))
+# #ggsave( filename = paste0('figures/Debris_Condition_', Sys.Date(), '.png'))
 
 # Vegetation Tibble - no bioswales with vegetation? 
 recent_inspections |> 
@@ -721,7 +712,7 @@ inlet_recent_inspection |>
   NULL
 # How to arrange this graph in Mapview? 
 
-# ggsave( filename = paste0('figures/watershed_condition_', Sys.Date(), '.png'))
+# #ggsave( filename = paste0('figures/watershed_condition_', Sys.Date(), '.png'))
 
 inlet_recent_inspection |> 
   mapview()
@@ -755,7 +746,7 @@ inlet_recent_inspection |>
     # coord_flip() + 
     NULL
 
-# ggsave( filename = paste0('figures/district_condition_', Sys.Date(), '.png'))
+# #ggsave( filename = paste0('figures/district_condition_', Sys.Date(), '.png'))
 
 # How to create a scatter plot of this data? How to visualize this data in MapView? 
 # How to create graphs with more than two variables? 
