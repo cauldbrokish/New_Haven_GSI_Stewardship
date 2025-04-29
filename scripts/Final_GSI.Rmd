@@ -83,22 +83,9 @@ zoning |>
             , sd_area=sd(area_m2)) |> 
   arrange(desc(total_area)) 
 
-zoning |> 
-  filter(districts == "Residence Districts") |> 
-  mapview()
-
 ```
 
 # 2 Data Transformation
-```{r}
-
-list.files('../GSI STEWARDSHIP Project_data_too_big')
-
-#stlayers is like list.files but for .gdb files
-st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
-
-```
-
 ## A Inlet
 ```{r}
 # Join neighborhoods, watersheds, and zoning in one chart called Inlet
@@ -119,7 +106,7 @@ inlet <-
          , sun_vs_shade = str_extract(Planting_Plan, "^[^ ]+") |> str_to_title()
   ) 
 
-# double check
+# double check sun_vs_shade variable
 inlet |>
   st_drop_geometry() |> 
   tabyl(Planting_Plan, sun_vs_shade)
@@ -137,33 +124,28 @@ m_zone  <- inlet |> mapview(zcol = 'districts')
 
 leafsync::sync(m_neigh, m_water, m_zone)
 
-# take a look
-inlet |> glimpse() # transpose
-inlet |> mapview(zcol = 'Install_Year')
-inlet |> mapview(zcol = 'Assigned')
-
 ```
 
 ### 1 Analysis
 ```{r}
 # What is the distribution of planting plans across the city? 
-# Percent of inlets with sun or shade planting plans
+## Percent of inlets with sun or shade planting plans
 inlet |> 
-  st_drop_geometry() |> # don't for get to drop the geometry
+  st_drop_geometry() |>
   tabyl(sun_vs_shade) |> 
-  ggplot(aes(percent, sun_vs_shade)) +
+  ggplot(aes(sun_vs_shade, percent)) +
   geom_col() + 
   theme_linedraw()
 
-# Number of planting plans by watershed, neighborhood, or business district?
+## Planting plans by watershed, neighborhood, or business district?
 
-# What is the distribution of planting plans assigned "emergency cleaning" vs "routine cleaning"? 
+## What is the distribution of planting plans assigned "emergency cleaning" vs "routine cleaning"?
 
 ```
 
 ## B Inspection
 ```{r}
-# Create tibble with inspection results, beginning with condition 
+# Create dataset with inspection results, beginning with condition 
 inspection <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'GI_Inspection'
@@ -191,34 +173,11 @@ all.equal(
 , inspection |> nrow()
 )
 
-# # short table to long table. 1:M
-# inlet |> 
-#   left_join(inspection_records, by = c('GlobalID' = 'GLOBALID'))
-
-# # long table to short table
-# inspection |> 
-#   left_join(inlet, by = 'GlobalID')
-
 ```
 
 ## C Inspection_Long
 ```{r}
-# Join inspections and inlets by FACILITYID and GlobalID to create a tibble with condition, neighborhood, watershed, and zone
-
-# FACILITYID is what to use?
-inlet |> 
-  left_join(inspection, by = c('GlobalID' = 'GlobalID')) # or ASSETGUID
-
-# USE THIS
-inlet |> # missing records are a known error
-  left_join(inspection, by = 'FACILITYID') # better but missing. Patch with global
-
-# missing records are a known error
-inlet |> 
-  anti_join(inspection, by = 'FACILITYID')
-
-inlet |> 
-  anti_join(inspection, by = c('GlobalID' = 'GlobalID'))
+# Join inspections and inlets by FACILITYID and GlobalID to create a dataset that includes condition, neighborhood, watershed, and zone
 
 inspection_long <- 
   inspection |> 
@@ -226,6 +185,7 @@ inspection_long <-
     inlet |> select(-c(CreationDate, edit_date, Creator, Editor, edit_year, edit_month, GlobalID))
               , by = c('FACILITYID' = 'FACILITYID'))
 
+# Calculate the number of GSI inlets per district
 n_gsi_district <- 
   inlet |> 
   group_by(districts) |> 
@@ -244,11 +204,12 @@ zoning |>
 
 ### 1 Analysis 
 ```{r}
-# Playing with the categories of assigned
+# What is in the categories of assigned
 inspection_long |> 
   tabyl(Assigned) |> 
   as_tibble()
 
+# Most inlets are assigned emergency cleaning
 inspection_long |> 
   tabyl(Assigned) |> 
   ggplot(aes(n, Assigned)) +
@@ -256,6 +217,7 @@ inspection_long |>
   theme_linedraw() + 
   NULL 
 
+# There is no discernable correlation between inlet condition and the presence of debris
 inspection_long |> 
   group_by(DEBRIS, Condition) |> 
   count() |> 
@@ -270,17 +232,12 @@ inspection_long |>
   as_tibble()
 
 # Account for mean area of a Neighborhood when comparing inlets across neighborhoods 
-
-(gsi_per_neigh <- 
+gsi_per_neigh <- 
   inlet |> 
   ungroup() |> 
   st_drop_geometry() |> 
   group_by(Neighborhood) |> 
-  count())
-
-neighs |> 
-  left_join(gsi_per_neigh, by = 'Neighborhood') |> 
-  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) # we are accounting for NA's
+  count()
 
 neighs |> 
   left_join(gsi_per_neigh, by = 'Neighborhood') |> 
@@ -289,7 +246,7 @@ neighs |>
 
 neighs |> 
   left_join(gsi_per_neigh, by = "Neighborhood") %>%
-  mutate(  n = ifelse(is.na(n), 0, n)
+  mutate(n = ifelse(is.na(n), 0, n)
          , area_m2 = st_area(.)
          , gsi_per_area = n / area_m2
          ) |> 
