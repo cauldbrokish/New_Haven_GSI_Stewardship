@@ -1,0 +1,701 @@
+---
+title: "New Haven GSI Stewardship"
+author: "Clare Auld-Brokish (with Dexter Locke)"
+date: "`r format(Sys.time())`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# 0 set up
+```{r}
+
+# Load libraries 
+packs <-c('tidyverse'   # cuz
+          , 'tidylog'   # prints out what was done in dplyr and tidyr; VERBOSE
+          # , 'tidygeocoder' # geocode addressses
+          , 'tidycensus'   # access Census data
+          , 'sf'           # for spatial data support
+          , 'mapview'      # web maps for zooming and panning around
+          , 'janitor'   # helps clean things pipe-friendly cross-tabulations
+          , 'leafsync'  # linked maps
+          )
+
+if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
+  install.packages(setdiff(packs, rownames(installed.packages())))
+}
+
+# load the packages all at once
+vapply(packs, library, character.only = TRUE, logical(1),
+       logical.return = TRUE, quietly = TRUE)
+
+
+```
+
+
+# 1 Read in data
+## A Neighborhoods
+```{r}
+
+neighs <- 
+   st_read('input_data/New_Haven_Neighborhoods/Neighborhood.shp', as_tibble = TRUE) |> 
+   select(Neighborhood = Neighbor_1) |> 
+   st_transform(3857) %>%
+   mutate(area_m2=as.double(st_area(.)))
+
+neighs |> mapview(zcol = "area_m2")
+
+neighs |> 
+  left_join(gsi_per_neigh, by = "Neighborhood") %>%
+  mutate(  n = ifelse(is.na(n), 0, n)
+         , area_m2 = st_area(.)
+         , gsi_per_area = n / area_m2
+         ) |> 
+  mapview(zcol = 'gsi_per_area', layer.name = 'GSI counts /<br>neigh area')
+
+```
+
+## B Watersheds and Zoning
+```{r}
+
+sheds <- 
+  st_read('../GSI STEWARDSHIP Project_data_too_big/12 digit Hydrologic Unit.geojson') |> 
+  st_transform(st_crs(neighs))
+
+mapview(neighs, alpha.regions = 0, lwd = 2) + mapview(sheds, zcol = 'Name') 
+
+# st_layers('../GSI STEWARDSHIP Project_data_too_big/_ags_data0AA96A07DF994B819C3A75306E2DD073.gdb')
+
+zoning <- 
+  st_read('../GSI STEWARDSHIP Project_data_too_big/_ags_data0AA96A07DF994B819C3A75306E2DD073.gdb') |> 
+  st_transform(st_crs(neighs)) |> 
+  select(-shape_Length,-shape_Area) %>%
+  mutate(area_m2=as.double(st_area(.)))
+
+zoning |> glimpse()
+zoning |> mapview(zcol = 
+                    # 'zone_code'
+                    'districts'
+                    # 'district_category'
+                  )
+
+#How much area is in each zone?
+zoning |> 
+  st_drop_geometry() |> 
+  group_by(districts) |> 
+  summarize(total_area=sum(area_m2)
+            ,n=n()
+            , mean_area=mean(area_m2)
+            , median_area=median(area_m2)
+            , sd_area=sd(area_m2)) |> 
+  arrange(desc(total_area)) 
+
+zoning |> 
+  filter(districts == "Residence Districts") |> 
+  mapview()
+
+```
+
+# 2 Data Transformation
+```{r}
+
+list.files('../GSI STEWARDSHIP Project_data_too_big')
+
+#stlayers is like list.files but for .gdb files
+st_layers('../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb')
+
+```
+
+## A Inlet
+```{r}
+# Join neighborhoods, watersheds, and zoning in one chart called Inlet
+inlet <- 
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+          , 'inlet'
+          , as_tibble = TRUE) |> 
+  st_intersection(neighs) |> # adds neighborhood name
+  st_intersection(sheds |> 
+                    select(watershed = Name, HUC12)
+                    ) |> 
+  st_intersection(zoning |> 
+                    select(zone_code, districts, district_category)
+                  ) |> 
+  mutate(  edit_year = lubridate::year(EditDate)
+         , edit_month = lubridate::month(EditDate)
+         , edit_date = lubridate::date(EditDate)
+         , sun_vs_shade = str_extract(Planting_Plan, "^[^ ]+") |> str_to_title()
+  ) 
+
+# double check
+inlet |>
+  st_drop_geometry() |> 
+  tabyl(Planting_Plan, sun_vs_shade)
+
+# MapView
+mapviewOptions(
+    legend.pos = 'bottomleft'
+  , layers.control.pos = 'topright'
+  )
+
+# View all the inlets at once by neighborhood, zone, and watershed 
+m_neigh <- inlet |> mapview(zcol = 'Neighborhood') # TK
+m_water <- inlet |> mapview(zcol = 'watershed')
+m_zone  <- inlet |> mapview(zcol = 'districts')
+
+leafsync::sync(m_neigh, m_water, m_zone)
+
+# take a look
+inlet |> glimpse() # transpose
+inlet |> mapview(zcol = 'Install_Year')
+inlet |> mapview(zcol = 'Assigned')
+
+```
+
+### 1 Analysis
+```{r}
+# What is the distribution of planting plans across the city? 
+# Percent of inlets with sun or shade planting plans
+inlet |> 
+  st_drop_geometry() |> # don't for get to drop the geometry
+  tabyl(sun_vs_shade) |> 
+  ggplot(aes(percent, sun_vs_shade)) +
+  geom_col() + 
+  theme_linedraw()
+
+# Number of planting plans by watershed, neighborhood, or business district?
+
+# What is the distribution of planting plans assigned "emergency cleaning" vs "routine cleaning"? 
+
+```
+
+## B Inspection
+```{r}
+# Create tibble with inspection results, beginning with condition 
+inspection <- 
+  st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
+          , 'GI_Inspection'
+          , as_tibble = TRUE) |> 
+mutate(Condition=factor(CONDITION,
+    levels=c("Unknown", NA, "Very Poor", "Poor", "Fair", "Good", "Very Good", "Excellent"))
+  , islegit=ifelse(Condition=="Unknown" | is.na(Condition)
+                   , "notlegit"
+                   , "legit"), 
+  edit_year = lubridate::year(EditDate), 
+    edit_month = lubridate::month(EditDate),
+    edit_date = lubridate::date(EditDate)
+  ) |>
+  select(-EditDate) 
+  
+# Double-checks classifications
+inspection |> tabyl(Condition,islegit)
+
+# This counts "missing-ness"
+inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
+
+# is the unique ID really unique? 
+all.equal(
+  inspection |> distinct(GlobalID) |> nrow()
+, inspection |> nrow()
+)
+
+# # short table to long table. 1:M
+# inlet |> 
+#   left_join(inspection_records, by = c('GlobalID' = 'GLOBALID'))
+
+# # long table to short table
+# inspection |> 
+#   left_join(inlet, by = 'GlobalID')
+
+```
+
+## C Inspection_Long
+```{r}
+# Join inspections and inlets by FACILITYID and GlobalID to create a tibble with condition, neighborhood, watershed, and zone
+
+# FACILITYID is what to use?
+inlet |> 
+  left_join(inspection, by = c('GlobalID' = 'GlobalID')) # or ASSETGUID
+
+# USE THIS
+inlet |> # missing records are a known error
+  left_join(inspection, by = 'FACILITYID') # better but missing. Patch with global
+
+# missing records are a known error
+inlet |> 
+  anti_join(inspection, by = 'FACILITYID')
+
+inlet |> 
+  anti_join(inspection, by = c('GlobalID' = 'GlobalID'))
+
+inspection_long <- 
+  inspection |> 
+  left_join(
+    inlet |> select(-c(CreationDate, edit_date, Creator, Editor, edit_year, edit_month, GlobalID))
+              , by = c('FACILITYID' = 'FACILITYID'))
+
+n_gsi_district <- 
+  inlet |> 
+  group_by(districts) |> 
+  summarize(  #total_area  = sum(area_m2)
+            , n           = n()
+            ) |> 
+  st_drop_geometry()
+
+zoning |> 
+  group_by(districts) |> 
+  summarise(district_area_m2 = sum(area_m2)) |> 
+  left_join(n_gsi_district, by = 'districts') |> 
+  mutate(gsi_per_district_area = ifelse(is.na(n), 0, n/district_area_m2))
+
+```
+
+### 1 Analysis 
+```{r}
+# Playing with the categories of assigned
+inspection_long |> 
+  tabyl(Assigned) |> 
+  as_tibble()
+
+inspection_long |> 
+  tabyl(Assigned) |> 
+  ggplot(aes(n, Assigned)) +
+  geom_col() + 
+  theme_linedraw() + 
+  NULL 
+
+inspection_long |> 
+  group_by(DEBRIS, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~DEBRIS, scales="free") + 
+  NULL
+  
+# Organize Assigned by watershed, neighborhood, or district 
+inspection_long |> 
+  tabyl(Neighborhood, Assigned) |> 
+  as_tibble()
+
+# Account for mean area of a Neighborhood when comparing inlets across neighborhoods 
+
+(gsi_per_neigh <- 
+  inlet |> 
+  ungroup() |> 
+  st_drop_geometry() |> 
+  group_by(Neighborhood) |> 
+  count())
+
+neighs |> 
+  left_join(gsi_per_neigh, by = 'Neighborhood') |> 
+  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) # we are accounting for NA's
+
+neighs |> 
+  left_join(gsi_per_neigh, by = 'Neighborhood') |> 
+  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) |> # we are accounting for NA's
+  mapview(zcol = 'gsi_per_neigh_area', layer.name = 'gsi_per_neigh_area')
+
+# Inlets in the Hill Neighborhood have the highest number of inspections and emergency cleanings
+inspection_long |> 
+  group_by(Neighborhood, Assigned, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = Assigned)) +
+  geom_col() + 
+  theme_linedraw() +
+  facet_wrap(~Neighborhood)
+
+# Inspections over time focus primarily on the Cove River-Frontal LI Sound watershed
+inspection_long |> 
+  group_by(watershed) |> 
+  count() |> 
+  ggplot(aes(watershed, n)) + # 'n' was missing
+  geom_col() + 
+  theme_classic()
+
+# Inspections over time focus primarily on the Cove River-Frontal LI Sound watershed in the Hill Neighborhood
+inspection_long |> 
+  group_by(watershed, Neighborhood) |> 
+  count() |> 
+  ggplot(aes(n, watershed)) +
+  geom_col() + 
+  theme_linedraw() + 
+  facet_wrap(~Neighborhood)
+
+# Characterization of the cleanings in the Cove River-Frontal LI Sound watershed
+inspection_long |> 
+  group_by(watershed, Assigned, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = Assigned)) +
+  geom_col() + 
+  theme_linedraw() +
+  facet_wrap(~watershed)
+
+#ggsave(filename = paste0('figures/inspection_long_Neighborhood_Condition', Sys.Date(), '.png'))
+
+# Tried to assess condition by inspection month 
+inspection_long |> glimpse() 
+inspection_long |>
+  ggplot(aes(edit_month, Condition, group = ASSETGUID, fill = Assigned)) + # edit_month is no longer a date, its a number
+  geom_col() +
+  #facet_wrap(~islegit, scales = 'free') +
+  facet_wrap(~Planting_Plan, scales = 'free') +
+  NULL
+
+# Same weird x-axis units in this graph too. 
+inspection_long |>
+  filter(islegit == 'legit') |> 
+  ggplot(aes(edit_month, Condition, group = ASSETGUID)) +
+  geom_col() +
+  theme_bw(16) +
+  NULL
+
+# Inspections by watershed per district 
+inspection_long |> 
+  group_by(districts, watershed) |> 
+  count(districts) |> 
+  ggplot(aes(districts, n)) +
+  geom_col() + 
+  facet_wrap(~watershed)
+
+```
+
+## D Recent_Inspections
+```{r}
+# Includes only the most recently performed inspection for each inlet
+  
+recent_inspections <- 
+  inspection |> 
+  group_by(ASSETGUID) |> 
+  arrange(edit_date) |> 
+  slice(1) |> # slice_max, slice_min instead of arrange |> slice 
+  ungroup()
+  
+# Most recent inspections are poor, fair, or good 
+recent_inspections |> 
+  tabyl(Condition) |> 
+  ggplot(aes(Condition, n)) +
+  geom_col()
+
+recent_inspections |> 
+  tabyl(CONDITION)
+
+recent_inspections |> 
+  tabyl(CONDITION) |> 
+  as_tibble()
+
+```
+
+### 1 Analysis 
+```{r}
+# The number of inspections performed over time have generally slowed
+recent_inspections |> 
+  tabyl(edit_date)  |> 
+  as_tibble() |> 
+  ggplot(aes(edit_date, n)) +
+  geom_point() + 
+  geom_line() +
+  geom_smooth()
+
+# Most inspections occur in April and May 
+recent_inspections |> 
+  tabyl(edit_month)  |> 
+  as_tibble() |> 
+  ggplot(aes(edit_month, n)) +
+  geom_point() + 
+  geom_line() +
+  geom_smooth()
+
+```
+
+## E Inlet_Recent_Inspections
+```{r}
+# Combines neighborhood, watershed, and district data with recent inspections data
+# inlets don't change. they have fixed locations with non-changing attributes
+# inspections (which has condition) DOES change, hence recent_inspections
+
+inlet_recent_inspections <- 
+  inlet |> 
+  left_join(
+    recent_inspections |> select(GlobalID, ASSETGUID, FACILITYID, DEBRIS, VEGETATION, OIL, FRAME, Condition, islegit)
+    , by = c('GlobalID' = 'ASSETGUID'))
+
+# double check
+inlet_recent_inspections |> glimpse()
+
+```
+
+### 1 Analysis 
+```{r}
+inlet_recent_inspections |> 
+  st_drop_geometry() |> 
+  group_by(Condition, islegit) |> 
+  count()
+
+# Most inspections occur April through July (by district)
+inlet_recent_inspections |> 
+  group_by(edit_month, Condition, district_category) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(district_category, n, fill = Condition)) +
+  geom_col() +
+  theme_bw(16) + 
+  facet_wrap(~edit_month, nrow=3) + #ncol=x only creates x number of columns; same with nrow
+  NULL
+
+# The least number of inspections occur in residential districts
+inlet_recent_inspections |> 
+  group_by(district_category) |> 
+  count()|> 
+  ggplot(aes(district_category, n)) +
+  geom_col() +
+  theme_bw(16) +
+  theme(axis.text.x=element_text(angle = 90)) + 
+  NULL
+
+# Recent inspections by district and Condition
+inlet_recent_inspections |> 
+  group_by(district_category, Condition) |> 
+  count()|> 
+  ggplot(aes(district_category, n, fill = Condition)) +
+  geom_col() +
+  theme_bw(16) +
+  theme(axis.text.x=element_text(angle = 90))
+
+#ggsave(filename = paste0('figures/inlet_recent_inspections_District_Condition', Sys.Date(), '.png'))
+
+# Most FRAME repair inspections occur in high-middle density districts
+inlet_recent_inspections |> 
+  group_by(FRAME, district_category) |> 
+  count() |> 
+  ggplot(aes(n, district_category)) +
+  geom_col() + 
+  facet_wrap(~FRAME, scales="free") + 
+  NULL
+
+# Cove River watershed has the greatest variety of assessments; mostly poor or NA in all other watersheds
+inlet_recent_inspections |> 
+  group_by(watershed, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~watershed, scales="free") +
+  NULL
+
+inlet_recent_inspections |> 
+  group_by(watershed, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = watershed)) +
+  geom_col() +
+  theme_bw(16) +
+  theme(legend.position = "bottom") +
+  facet_wrap(~watershed) +
+  NULL
+
+# ggsave( filename = paste0('figures/watershed_condition_', Sys.Date(), '.png'))
+
+# Inlet condition by district 
+inlet_recent_inspections |> 
+  group_by(districts, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~districts, scales="free") +
+  NULL
+
+# ggsave( filename = paste0('figures/district_condition', Sys.Date(), '.png'))
+
+inlet_recent_inspections |> 
+  group_by(watershed, districts, Condition) |> 
+  count() |> 
+  ggplot(aes(Condition, n, fill = districts)) +
+  geom_col() + 
+  facet_wrap(~watershed, scales="free") +
+  NULL
+
+# ggsave( filename = paste0('figures/watershed_district_condition', Sys.Date(), '.png'))
+
+inlet_recent_inspections |> 
+    group_by(districts, Condition) |> 
+    count() |> 
+    ggplot(aes(n, Condition, fill = districts)) +
+    geom_col() +
+    theme_bw(16) +
+    theme(legend.position = "bottom") +
+    # theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5)) +
+    facet_wrap(~districts) +
+    NULL
+
+# ggsave( filename = paste0('figures/district_condition_', Sys.Date(), '.png'))
+
+```
+
+# 3 Exploratory
+## A Inspection Frequencies
+```{r}
+
+inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
+
+# Tabulate frequency of the asset_GLOBALID A
+(inspection_freq <- 
+  inspection |> 
+  tabyl(ASSETGUID) |> 
+  as_tibble() |> 
+  arrange(desc(n)))
+
+# how often have these been inspected?
+inspection_freq |> 
+  summary() # roughly 4x
+
+# what's the distribution of frequencies?
+inspection_freq_freq <- 
+  inspection_freq |> 
+  tabyl(n) |> 
+  as_tibble()
+
+# Valid percent of frequency distribution
+inspection_freq |> 
+  ggplot(aes(n, valid_percent)) + 
+  geom_col() +
+  theme_bw(16) +
+  NULL 
+
+inspection_freq_freq |> 
+  ggplot(aes(n,n_n)) + 
+  geom_col() +
+  theme_bw(16) +
+  NULL 
+
+```
+
+## B Condition, DEBRIS, VEGETATION, OIL Analysis
+```{r}
+# The assignment of cleaning does not measurably impact the condition of the bioswales
+inspection_long |> 
+  group_by(Assigned, Condition) |> 
+  count('Routine Cleaning') |> # How do you just count the number of variables within a column/category? 
+  ggplot(aes(n, Condition)) + 
+  geom_col() + 
+  facet_wrap(~Assigned, scales="free") +
+NULL
+
+#ggsave( filename = paste0('figures/Assigned_Condition', Sys.Date(), '.png'))
+
+# Inlet condition by watershed and neighborhood
+inspection_long |> 
+  ggplot(aes(Condition, fill = Neighborhood)) +
+  geom_bar() +
+  facet_wrap(~watershed, scales = "free_y") + 
+NULL 
+
+#ggsave(filename = paste0('figures/Neighborhood_Condition', Sys.Date(), '.png'))
+
+# Visualizing the condition of Recent_Inspections by edit month 
+inspection_long |> 
+  group_by(edit_month, Condition) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(n, Condition, fill = Condition)) +
+  geom_col() +
+  theme_bw(16) + 
+  facet_wrap(~edit_month, nrow=3) + #ncol=x only creates x number of columns; same with nrow
+  NULL
+
+#ggsave(filename = paste0('figures/Edit_month_Condition', Sys.Date(), '.png'))
+
+# Islegit vs Notlegit in Recent_inspections
+recent_inspections |> 
+  tabyl(Condition, islegit) |> 
+  as_tibble() |> 
+  pivot_longer(-Condition, names_to = "islegit") |> 
+  ggplot(aes(value, Condition)) +
+  geom_col() + 
+  facet_wrap(~islegit, scales="free") + 
+  NULL
+
+# Debris - upon inspection, most inlets had debris
+recent_inspections |> 
+  tabyl(DEBRIS) |> 
+  as_tibble() |> 
+  arrange(desc(n))
+  
+recent_inspections |> 
+  group_by(DEBRIS, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = DEBRIS)) + 
+  geom_col() + 
+  theme_linedraw()
+
+# The only bioswales with debris in them were assessed in a "poor", "very poor", and "NA" condition  
+recent_inspections |> 
+  group_by(DEBRIS, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = DEBRIS)) +
+  geom_col() +
+  theme_bw(16) +
+  theme(legend.position = "bottom") +
+  # theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = .5)) +
+  facet_wrap(~DEBRIS) +
+  NULL
+
+#ggsave( filename = paste0('figures/Debris_Condition_', Sys.Date(), '.png'))
+
+# Vegetation - no bioswales with vegetation? 
+recent_inspections |> 
+  group_by(VEGETATION, Condition) |> 
+  count() |> 
+  ggplot(aes(Condition, n, fill = VEGETATION)) +
+  geom_col() + 
+  #facet_wrap(~VEGETATION, scales="free") + 
+  NULL
+
+#ggsave( filename = paste0('figures/Vegetation_Condition_', Sys.Date(), '.png'))
+
+# Oil - most bioswales did not have oil in them 
+recent_inspections |> 
+  group_by(Condition, OIL) |> 
+  count() |> 
+  ggplot(aes(Condition, n, fill = OIL)) +
+  geom_col() + 
+  #facet_wrap(~OIL, scales="free") + 
+  NULL
+
+#ggsave( filename = paste0('figures/Oil_Condition', Sys.Date(), '.png'))
+
+# Frame condition
+recent_inspections |> 
+  group_by(FRAME, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition)) +
+  geom_col() + 
+  facet_wrap(~FRAME, scales="free") + 
+  NULL
+
+```
+
+## C Parks
+```{r}
+
+(parks <- st_read('input_data/NewHavenParksLayers_08032021/NewHavenParks.shp'))
+
+parks |> mapview()
+
+mapview(parks) +
+  mapview(neighs, zcol = "Neighborhood", layer.name = "neighborhood") +
+  mapview(inlet)
+
+```
+
+## D Parcels
+```{r}
+# HelpMe_Dexter: neither of the following parcels functions seem to work ("Error: Cannot open. . . doesn't seem to exist")
+
+list.files('../GSI STEWARDSHIP Project_data_too_big/')
+
+parcels <- 
+   st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management/New Haven Parcels Management.geojson')
+
+#parcels <- 
+#  st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management/New Haven # Parcels Management (1).geojson')
+
+```
+
+
+
