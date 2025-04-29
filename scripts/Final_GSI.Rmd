@@ -46,14 +46,6 @@ neighs <-
 
 neighs |> mapview(zcol = "area_m2")
 
-neighs |> 
-  left_join(gsi_per_neigh, by = "Neighborhood") %>%
-  mutate(  n = ifelse(is.na(n), 0, n)
-         , area_m2 = st_area(.)
-         , gsi_per_area = n / area_m2
-         ) |> 
-  mapview(zcol = 'gsi_per_area', layer.name = 'GSI counts /<br>neigh area')
-
 ```
 
 ## B Watersheds and Zoning
@@ -294,6 +286,14 @@ neighs |>
   left_join(gsi_per_neigh, by = 'Neighborhood') |> 
   mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) |> # we are accounting for NA's
   mapview(zcol = 'gsi_per_neigh_area', layer.name = 'gsi_per_neigh_area')
+
+neighs |> 
+  left_join(gsi_per_neigh, by = "Neighborhood") %>%
+  mutate(  n = ifelse(is.na(n), 0, n)
+         , area_m2 = st_area(.)
+         , gsi_per_area = n / area_m2
+         ) |> 
+  mapview(zcol = 'gsi_per_area', layer.name = 'GSI counts /<br>neigh area')
 
 # Inlets in the Hill Neighborhood have the highest number of inspections and emergency cleanings
 inspection_long |> 
@@ -689,10 +689,10 @@ mapview(parks) +
 # response: did you move your project location again? 
 # response: in the knit drop down, make sure the Knit Directory is set to Project directory
 # response: its working for me!
-list.files('../GSI STEWARDSHIP Project_data_too_big/')
+#list.files('../GSI STEWARDSHIP Project_data_too_big/')
 
-parcels <- 
-   st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management/New Haven Parcels Management.geojson')
+#parcels <- 
+#   st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management/New Haven Parcels Management.geojson')
 
 #parcels <- 
 #  st_read('../GSI STEWARDSHIP Project_data_too_big/New Haven Parcels Management/New Haven # Parcels Management (1).geojson')
