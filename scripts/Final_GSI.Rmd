@@ -686,7 +686,9 @@ mapview(parks) +
 ## D Parcels
 ```{r}
 # HelpMe_Dexter: neither of the following parcels functions seem to work ("Error: Cannot open. . . doesn't seem to exist")
-
+# response: did you move your project location again? 
+# response: in the knit drop down, make sure the Knit Directory is set to Project directory
+# response: its working for me!
 list.files('../GSI STEWARDSHIP Project_data_too_big/')
 
 parcels <- 
