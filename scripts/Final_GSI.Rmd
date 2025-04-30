@@ -9,7 +9,7 @@ editor_options:
 
 
 # 0 set up
-```{r echo=FALSE}
+```{r include=FALSE}
 
 # Load libraries 
 packs <-c('tidyverse'   # cuz
@@ -36,7 +36,7 @@ vapply(packs, library, character.only = TRUE, logical(1),
 
 # 1 Read in data
 ## A Neighborhoods
-```{r echo=FALSE}
+```{r include=FALSE}
 
 neighs <- 
    st_read('input_data/New_Haven_Neighborhoods/Neighborhood.shp', as_tibble = TRUE) |> 
@@ -44,35 +44,45 @@ neighs <-
    st_transform(3857) %>%
    mutate(area_m2=as.double(st_area(.)))
 
+```
+
+```{r echo=FALSE}
 neighs |> mapview(zcol = "area_m2")
 
 ```
 
 ## B Watersheds and Zoning
-```{r echo=FALSE}
+```{r include=FALSE}
 
 sheds <- 
   st_read('../GSI STEWARDSHIP Project_data_too_big/12 digit Hydrologic Unit.geojson') |> 
   st_transform(st_crs(neighs))
 
+```
+
+```{r echo=FALSE}
 mapview(neighs, alpha.regions = 0, lwd = 2) + mapview(sheds, zcol = 'Name') 
 
-# st_layers('../GSI STEWARDSHIP Project_data_too_big/_ags_data0AA96A07DF994B819C3A75306E2DD073.gdb')
+```
 
+```{r include=FALSE}
 zoning <- 
   st_read('../GSI STEWARDSHIP Project_data_too_big/_ags_data0AA96A07DF994B819C3A75306E2DD073.gdb') |> 
   st_transform(st_crs(neighs)) |> 
   select(-shape_Length,-shape_Area) %>%
   mutate(area_m2=as.double(st_area(.)))
 
-zoning |> glimpse()
+```
+
+```{r echo=FALSE}
 zoning |> mapview(zcol = 
-                    # 'zone_code'
                     'districts'
-                    # 'district_category'
                   )
 
-#How much area is in each zone?
+```
+
+Area in each zone
+```{r include=FALSE}
 zoning |> 
   st_drop_geometry() |> 
   group_by(districts) |> 
@@ -88,7 +98,7 @@ zoning |>
 # 2 Data Transformation
 ## A Inlet
 Join neighborhoods, watersheds, and zoning in one dataset called Inlet
-```{r echo=FALSE}
+```{r include=FALSE}
 inlet <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'inlet'
@@ -114,7 +124,9 @@ inlet |>
   st_drop_geometry() |> 
   tabyl(Planting_Plan, sun_vs_shade)
 
-# MapView
+```
+
+```{r echo=FALSE}
 mapviewOptions(
     legend.pos = 'bottomleft'
   , layers.control.pos = 'topright'
@@ -124,7 +136,7 @@ mapviewOptions(
 
 View all inlets at once by neighborhood, zone, and watershed
 ``` {r echo=FALSE}
-m_neigh <- inlet |> mapview(zcol = 'Neighborhood') # TK
+m_neigh <- inlet |> mapview(zcol = 'Neighborhood')
 m_water <- inlet |> mapview(zcol = 'watershed')
 m_zone  <- inlet |> mapview(zcol = 'districts')
 
@@ -149,7 +161,7 @@ Remaining questions/potential graphs:
 
 ## B Inspection
 Create a dataset with inspection results, beginning with condition
-```{r echo=FALSE}
+```{r include=FALSE}
 inspection <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
           , 'GI_Inspection'
@@ -167,31 +179,9 @@ mutate(Condition=factor(CONDITION,
 
 ```
 
-Double-check classifications
-``` {r echo=FALSE}
-# Double-checks classifications
-inspection |> tabyl(Condition,islegit)
-
-```
-
-Count "missing-ness" 
-```{r echo=FALSE}
-inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
-
-```
-
-Is the unique ID really unique? 
-```{r echo=FALSE}
-all.equal(
-  inspection |> distinct(GlobalID) |> nrow()
-, inspection |> nrow()
-)
-
-```
-
 ### B1 GSI per Neighborhood
 Account for mean area of a neighborhood when comparing inlets across neighborhoods
-```{r echo=FALSE}
+```{r include=FALSE}
 gsi_per_neigh <- 
   inlet |> 
   ungroup() |> 
@@ -199,9 +189,12 @@ gsi_per_neigh <-
   group_by(Neighborhood) |> 
   count()
 
+```
+
+```{r echo=FALSE}
 neighs |> 
   left_join(gsi_per_neigh, by = 'Neighborhood') |> 
-  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) |> # we are accounting for NA's
+  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) |> 
   mapview(zcol = 'gsi_per_neigh_area', layer.name = 'gsi_per_neigh_area')
 
 neighs |> 
@@ -215,14 +208,14 @@ neighs |>
 ```
 
 ### B2 Inspection Frequencies
-```{r echo=FALSE}
+```{r include=FALSE}
 
 inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
 
 ```
 
 Tabulate frequency of the asset_GLOBALID
-```{r echo=FALSE}
+```{r include=FALSE}
 inspection_freq <- 
   inspection |> 
   tabyl(ASSETGUID) |> 
@@ -234,7 +227,7 @@ inspection_freq <-
 How often have inlets been inspected? 
 ```{r echo=FALSE}
 inspection_freq |> 
-  summary() # roughly 4x
+  summary()
 
 ```
 Analysis: Roughly four times. 
@@ -266,14 +259,17 @@ inspection_freq_freq |>
 
 ## C Recent_Inspections
 Includes only the most recently performed inspection for each inlet
-```{r echo=FALSE}
+```{r include=FALSE}
 recent_inspections <- 
   inspection |> 
   group_by(ASSETGUID) |> 
   arrange(edit_date) |> 
-  slice(1) |> # slice_max, slice_min instead of arrange |> slice 
+  slice(1) |>  
   ungroup()
-  
+
+```
+
+```{r echo=FALSE}
 recent_inspections |> 
   tabyl(CONDITION) |> 
   as_tibble()
@@ -397,7 +393,7 @@ recent_inspections |>
 
 ## D Inspection_Long
 Join inspections and inlets by FACILITYID and GlobalID to create a dataset that includes condition, neighborhood, watershed, and zone
-```{r echo=FALSE}
+```{r include=FALSE}
 inspection_long <- 
   inspection |> 
   left_join(
@@ -407,7 +403,7 @@ inspection_long <-
 ```
 
 Calculate the number of inlets per district
-```{r echo=FALSE}
+```{r include=FALSE}
 n_gsi_district <- 
   inlet |> 
   group_by(districts) |> 
@@ -430,7 +426,7 @@ Inspections by watershed
 inspection_long |> 
   group_by(watershed) |> 
   count() |> 
-  ggplot(aes(watershed, n)) + # 'n' was missing
+  ggplot(aes(watershed, n)) + 
   geom_col() + 
   theme_classic()
 
@@ -477,9 +473,6 @@ inspection_long |>
   tabyl(Neighborhood, Assigned) |> 
   as_tibble()
 
-```
-
-```{r echo=FALSE}
 inspection_long |> 
   tabyl(Assigned) |> 
   ggplot(aes(n, Assigned)) +
@@ -568,7 +561,7 @@ Analysis: There is no discernible correlation between inlet condition and the pr
 
 ## E Inlet_Recent_Inspections
 Combines neighborhood, watershed, and district data with recent inspections data
-```{r echo=FALSE}
+```{r include=FALSE}
 inlet_recent_inspections <- 
   inlet |> 
   left_join(
@@ -629,7 +622,6 @@ inlet_recent_inspections |>
 
 Inlet condition by edit month and district category
 ```{r echo=FALSE}
-# Most inspections occur April through July (by district category)
 inlet_recent_inspections |> 
   group_by(edit_month, Condition, district_category) |> 
   summarize(n=n()) |> 
