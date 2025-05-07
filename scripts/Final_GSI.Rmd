@@ -81,8 +81,8 @@ zoning |> mapview(zcol =
 
 ```
 
-Area in each zone
 ```{r include=FALSE}
+# Area in each zone
 zoning |> 
   st_drop_geometry() |> 
   group_by(districts) |> 
@@ -95,9 +95,21 @@ zoning |>
 
 ```
 
+## C Parks
+```{r include=FALSE}
+parks <- st_read('input_data/NewHavenParksLayers_08032021/NewHavenParks.shp')
+
+```
+
+```{r echo=FALSE}
+mapview(parks) +
+  mapview(neighs, zcol = "Neighborhood", layer.name = "neighborhood")
+
+```
+
 # 2 Data Transformation
 ## A Inlet
-Join neighborhoods, watersheds, and zoning in one dataset called Inlet
+Join neighborhoods, watersheds, and zoning in one dataset called Inlet (n = 290)
 ```{r include=FALSE}
 inlet <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
@@ -115,14 +127,6 @@ inlet <-
          , edit_date = lubridate::date(EditDate)
          , sun_vs_shade = str_extract(Planting_Plan, "^[^ ]+") |> str_to_title()
   ) 
-
-```
-
-Double check sun_vs_shade variable
-```{r echo=FALSE}
-inlet |>
-  st_drop_geometry() |> 
-  tabyl(Planting_Plan, sun_vs_shade)
 
 ```
 
@@ -144,23 +148,50 @@ leafsync::sync(m_neigh, m_water, m_zone)
 
 ```
 
-### 1 Analysis
-What is the distribution of planting plans (sun vs. shade) across the city?
-```{r echo=FALSE}
-inlet |> 
-  st_drop_geometry() |>
-  tabyl(sun_vs_shade) |> 
-  ggplot(aes(sun_vs_shade, percent)) +
-  geom_col() + 
-  theme_linedraw()
+### A1 Inlets per District 
+``` {r include=FALSE}
+n_gsi_district <- 
+  inlet |> 
+  group_by(districts) |> 
+  summarize(  #total_area  = sum(area_m2)
+            , n           = n()
+            ) |> 
+  st_drop_geometry()
+
+zoning |> 
+  group_by(districts) |> 
+  summarise(district_area_m2 = sum(area_m2)) |> 
+  left_join(n_gsi_district, by = 'districts') |> 
+  mutate(gsi_per_district_area = ifelse(is.na(n), 0, n/district_area_m2))
+
 ```
 
-Remaining questions/potential graphs: 
-- Planting plans by watershed, neighborhood, or business district?
-- What is the distribution of planting plans assigned "emergency cleaning" vs "routine cleaning"?
+### A2 Inlets per District Category 
+``` {r echo=FALSE}
+n_gsi_district_category <- 
+  inlet |> 
+  group_by(district_category) |> 
+  summarize(  #total_area  = sum(area_m2)
+            , n           = n()
+            ) |> 
+  st_drop_geometry()
+
+```
+
+### A3 Inlets per Watershed 
+``` {r echo=FALSE}
+n_gsi_watershed <- 
+  inlet |> 
+  group_by(watershed) |> 
+  summarize(  #total_area  = sum(area_m2)
+            , n           = n()
+            ) |> 
+  st_drop_geometry()
+
+```
 
 ## B Inspection
-Create a dataset with inspection results, beginning with condition
+Create a dataset with all inspection results from 2021 to 2025, beginning with condition (n = 1,256)
 ```{r include=FALSE}
 inspection <- 
   st_read(  '../GSI STEWARDSHIP Project_data_too_big/50961b03-cb0b-49b9-a656-77d71bc30bbd.gdb'
@@ -179,6 +210,22 @@ mutate(Condition=factor(CONDITION,
 
 ```
 
+```{r echo=FALSE}
+inspection |> 
+  tabyl(CONDITION, islegit) |> 
+  pivot_longer(-CONDITION, names_to = "islegit") |> 
+  ggplot(aes(value, CONDITION, fill = CONDITION)) +
+  geom_col() + 
+  facet_wrap(~islegit) + 
+  theme_linedraw(12) +
+  labs(
+    x = "Number of Inspections", 
+    y = "Number of Inlets",
+    title = "Most total inspections are legit"
+  )
+
+```
+
 ### B1 GSI per Neighborhood
 Account for mean area of a neighborhood when comparing inlets across neighborhoods
 ```{r include=FALSE}
@@ -189,33 +236,28 @@ gsi_per_neigh <-
   group_by(Neighborhood) |> 
   count()
 
-```
+# HelpMe_Dexter: is there a way to make the labels on these mapviews more helpful (more sensitive to smaller numbers or change the numbers? I added a inlets per neighborhood mapview to the Analysis Section 3.1 so maybe its redundant now here)
 
-```{r echo=FALSE}
 neighs |> 
   left_join(gsi_per_neigh, by = 'Neighborhood') |> 
   mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) |> 
   mapview(zcol = 'gsi_per_neigh_area', layer.name = 'gsi_per_neigh_area')
 
+# HelpMe_Dexter: R says there is an error because "argument is of length zero". . . 
 neighs |> 
   left_join(gsi_per_neigh, by = "Neighborhood") %>%
   mutate(n = ifelse(is.na(n), 0, n)
          , area_m2 = st_area(.)
          , gsi_per_area = n / area_m2
-         ) |> 
+         ) 
   mapview(zcol = 'gsi_per_area', layer.name = 'GSI counts /<br>neigh area')
-
+  
 ```
 
-### B2 Inspection Frequencies
+### B2 Frequency of Inspections
 ```{r include=FALSE}
-
 inspection |> map(~sum(is.na(.))) |> bind_rows() |> t()
 
-```
-
-Tabulate frequency of the asset_GLOBALID
-```{r include=FALSE}
 inspection_freq <- 
   inspection |> 
   tabyl(ASSETGUID) |> 
@@ -224,26 +266,184 @@ inspection_freq <-
 
 ```
 
-How often have inlets been inspected? 
-```{r echo=FALSE}
-inspection_freq |> 
-  summary()
+## C Inspection_Long
+Join inspections and inlets by FACILITYID and GlobalID to create a dataset that includes condition, neighborhood, watershed, and zone (n = 1,258)
+```{r include=FALSE}
+inspection_long <- 
+  inspection |> 
+  left_join(
+    inlet |> select(-c(CreationDate, edit_date, Creator, Editor, edit_year, edit_month, GlobalID))
+              , by = c('FACILITYID' = 'FACILITYID'))
 
 ```
-Analysis: Roughly four times. 
 
-Valid percent of frequency distribution
+## D Recent_Inspections
+Includes only the most recently performed inspection for each inlet (n = 290)
+```{r include=FALSE}
+recent_inspections <- 
+  inspection |> 
+  group_by(ASSETGUID) |> 
+  arrange(edit_date) |> 
+  slice(1) |>  
+  ungroup()
+
+recent_inspections |> 
+  tabyl(CONDITION) |> 
+  as_tibble()
+```
+
+## E Inlet_Recent_Inspections
+Combines neighborhood, watershed, and district data with recent inspections data (n = 290)
+```{r include=FALSE}
+inlet_recent_inspections <- 
+  inlet |> 
+  left_join(
+    recent_inspections |> select(GlobalID, ASSETGUID, FACILITYID, DEBRIS, VEGETATION, OIL, FRAME, Condition, islegit)
+    , by = c('GlobalID' = 'ASSETGUID'))
+
+inlet_recent_inspections |> 
+  st_drop_geometry() |> 
+  group_by(Condition, islegit) |> 
+  count()
+
+```
+
+# 3 Analysis 
+## 1 Inlets per Watershed, Neighborhood, District, and District Category
+```{r echo=FALSE}
+n_gsi_watershed |> 
+  st_drop_geometry() |> 
+  group_by(n, watershed) |> 
+  ggplot(aes(watershed, n, fill = n)) + 
+  geom_col() + 
+  theme_linedraw(12) + 
+  labs (
+    x = "Watershed",
+    y = "Inlets",
+    title = "Most inlets are located in the Cove River-Frontal LI Sound Watershed"
+  )  
+
+mapview(sheds, zcol = "Name", layer.name = "Watershed") +
+  mapview(inlet)
+  
+gsi_per_neigh |> 
+  st_drop_geometry() |> 
+  group_by(n, Neighborhood) |> 
+  ggplot(aes(Neighborhood, n, fill = n)) + 
+  geom_col() + 
+  theme_linedraw(12) + 
+  theme(axis.text.x=element_text(angle = 90)) +
+  labs (
+    x = "Neighborhood",
+    y = "Inlets",
+    title = "Most inlets are located in the Hill Neighborhood"
+  )
+
+mapview(neighs, zcol = "Neighborhood", layer.name = "Neighborhood") +
+  mapview(inlet)
+
+n_gsi_district |> 
+  st_drop_geometry() |> 
+  group_by(n, districts) |> 
+  ggplot(aes(n, districts, fill = n)) + 
+  geom_col() + 
+  theme_linedraw(12) + 
+  labs (
+    x = "Inlets",
+    y = "Districts",
+    title = "Residential and business districts have the highest number of inlets per district"
+  )
+
+mapview(zoning, zcol = "districts", layer.name = "Districts") +
+  mapview(inlet)
+
+n_gsi_district_category |> 
+  st_drop_geometry() |> 
+  group_by(n, district_category) |> 
+  ggplot(aes(n, district_category, fill = n)) + 
+  geom_col() + 
+  theme_linedraw(12) + 
+  labs (
+    x = "Inlets",
+    y = "District Categories",
+    title = "High-middle density and general business districts have the highest number of inlets per district"
+  )
+
+mapview(zoning, zcol = "district_category", layer.name = "District Category") +
+  mapview(inlet)
+
+```
+
+## 2 Focus of Inspections
+```{r echo=FALSE}
+inspection_long |> 
+  group_by(watershed) |> 
+  count() |> 
+  ggplot(aes(watershed, n, fill =  n)) + 
+  geom_col() + 
+  theme_linedraw(12) +
+  labs(
+    x = "Watershed", 
+    y = "Inspections",
+    title = "Inspections focus primarily on the Cove River-Frontal LI Sound watershed"
+  )
+
+inspection_long |> 
+  group_by(watershed, Neighborhood) |> 
+  count() |> 
+  ggplot(aes(n, Neighborhood, fill = n)) +
+  geom_col() + 
+  theme_linedraw(12) + 
+  facet_wrap(~watershed) + 
+  labs(
+    x = "Inspections", 
+    y = "Neighborhood",
+    title = "Inspections focus primarily on the Cove River-Frontal LI Sound watershed in the Hill Neighborhood"
+  )
+
+inspection_long |> 
+  group_by(districts) |> 
+  count(districts) |> 
+  ggplot(aes(districts, n, fill = n)) +
+  geom_col() + 
+  theme_linedraw(12) + 
+  theme(axis.text.x=element_text(angle = 90)) +
+  labs(
+    x = "Districts", 
+    y = "Inspections",
+    title = "Most inspections occur in residential districts"
+  )
+
+```
+
+## 3 Frequency of Inspections
 ```{r echo=FALSE}
 inspection_freq |> 
-  ggplot(aes(n, valid_percent)) + 
+  ggplot(aes(n, percent, fill = percent)) + 
   geom_col() +
-  theme_bw(16) +
-  NULL 
+  theme_linedraw(12) + 
+  scale_x_binned() + 
+  labs(
+    y = "Percent",
+    title = "The majority of inlets have been inspected roughly four times between 2021 and 2025"
+  )
+
+inspection_freq |> 
+  ggplot(aes(n, valid_percent, fill = valid_percent)) + 
+  geom_col() +
+  theme_linedraw(12) + 
+  scale_x_binned() + 
+  labs(
+    y = "Valid Percent",
+    title = "The results for valid percent of inspections are similar to the results for percent (above)",
+  )
 
 ```
 
-What is the distribution of frequencies? 
+Distribution of frequencies
 ```{r echo=FALSE}
+#HelpMe_Dexter: remind me what inspection_freq_freq was for? Is it still necessary to include given the above graphs? 
+
 inspection_freq_freq <- 
   inspection_freq |> 
   tabyl(n) |> 
@@ -257,445 +457,406 @@ inspection_freq_freq |>
 
 ```
 
-## C Recent_Inspections
-Includes only the most recently performed inspection for each inlet
-```{r include=FALSE}
-recent_inspections <- 
-  inspection |> 
-  group_by(ASSETGUID) |> 
-  arrange(edit_date) |> 
-  slice(1) |>  
-  ungroup()
-
-```
-
+## 4 Inspection Timing
 ```{r echo=FALSE}
+
 recent_inspections |> 
-  tabyl(CONDITION) |> 
-  as_tibble()
+  tabyl(Condition, islegit) |> 
+  pivot_longer(-Condition, names_to = "islegit") |> 
+  ggplot(aes(value, Condition, fill = Condition)) +
+  geom_col() + 
+  facet_wrap(~islegit) + 
+  theme_linedraw(12) +
+  labs(
+    x = "Number of Inspections", 
+    y = "Number of Inlets",
+    title = "Most recent inspections are legit"
+  )
 
-```
-
-Recent inspections by condition
-```{r echo=FALSE}
-recent_inspections |> 
-  tabyl(Condition) |> 
-  ggplot(aes(Condition, n)) +
-  geom_col()
-
-```
-Analysis: Most recent inspections are poor, fair, or good
-
-### 1 Analysis 
-Most recent inspection for each inlet by year 
-```{r echo=FALSE}
 recent_inspections |> 
   tabyl(edit_date)  |> 
   as_tibble() |> 
   ggplot(aes(edit_date, n)) +
   geom_point() + 
   geom_line() +
-  geom_smooth()
+  geom_smooth() + 
+  theme_linedraw(12) +
+  labs(
+    x = "Last Inspection Year", 
+    y = "Number of Inlets",
+    title = "Most of the inlets were last inspected in 2021"
+  )
 
-```
-
-Most recent inspection for each inlet by month
-```{r echo=FALSE}
 recent_inspections |> 
   tabyl(edit_month)  |> 
   as_tibble() |> 
   ggplot(aes(edit_month, n)) +
   geom_point() + 
   geom_line() +
-  geom_smooth()
+  geom_smooth() + 
+  theme_linedraw(12) +
+  scale_x_binned() + 
+  labs(
+    x = "Last Inspection Month", 
+    y = "Number of Inlets",
+    title = "Most of the inlets were last inspected between April and June"
+  )
 
-```
-Analysis: The most recent inspection for each inlet occurred in April and May.
-
-Islegit vs. Notlegit in recent inspections
-```{r echo=FALSE}
-recent_inspections |> 
-  tabyl(Condition, islegit) |> 
-  as_tibble() |> 
-  pivot_longer(-Condition, names_to = "islegit") |> 
-  ggplot(aes(value, Condition)) +
-  geom_col() + 
-  facet_wrap(~islegit, scales="free") + 
-  NULL
-```
-
-### 2 Analysis - Debris, Vegetation, Oil
-Debris
-```{r echo=FALSE}
-recent_inspections |> 
-  tabyl(DEBRIS) |> 
-  as_tibble() |> 
-  arrange(desc(n))
-  
-recent_inspections |> 
-  group_by(DEBRIS, Condition) |> 
-  count() |> 
-  ggplot(aes(n, Condition, fill = DEBRIS)) + 
-  geom_col() + 
-  theme_linedraw()
-
-```
-Analysis: Most bioswales had debris. 
-
-```{r echo=FALSE}
-recent_inspections |> 
-  group_by(DEBRIS, Condition) |> 
-  count() |> 
-  ggplot(aes(n, Condition, fill = DEBRIS)) +
+inspection_long |> 
+  group_by(edit_month, Condition) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(n, Condition, fill = Condition)) +
   geom_col() +
-  theme_bw(16) +
-  theme(legend.position = "bottom") +
-  facet_wrap(~DEBRIS) +
-  NULL
+  theme_linedraw(12) +  
+  facet_wrap(~edit_month, nrow=3) + 
+  labs(
+    x = "Inspections", 
+    y = "Condition",
+    title = "There is minimal positive correlation between inspection month and inlet condition",
+    subtitle = "Inlets inspected in January and December are consistently in fair condition"
+  )
 ```
-Analysis: The only bioswales with debris in them were assessed in a "poor", "very poor", and "NA" condition.
 
-Vegetation
+## 5 Planting Plan (sun_vs_shade)
 ```{r echo=FALSE}
-recent_inspections |> 
-  group_by(VEGETATION, Condition) |> 
-  count() |> 
-  ggplot(aes(Condition, n, fill = VEGETATION)) +
+inlet |>
+  st_drop_geometry() |> 
+  tabyl(Planting_Plan, sun_vs_shade)
+
+inlet |> 
+  st_drop_geometry() |>
+  tabyl(sun_vs_shade) |> 
+  ggplot(aes(sun_vs_shade, percent, fill = sun_vs_shade)) +
   geom_col() + 
-  NULL
+  theme_linedraw(12) + 
+  labs(
+    x = "Planting Plan", 
+    y = "Percent", 
+    title = "There are more sun planting plans than shade planting plans for inlets across the city",
+    subtitle = "About 46 percent of inlets don't have a planting plan"
+  )
 
-```
-Analysis: Most bioswales did not have vegetation.
-
-Oil 
-```{r echo=FALSE}
-recent_inspections |> 
-  group_by(Condition, OIL) |> 
-  count() |> 
-  ggplot(aes(Condition, n, fill = OIL)) +
-  geom_col() + 
-  NULL
-
-```
-Analysis: Most bioswales did not have oil. 
-
-Frame condition
-```{r echo=FALSE}
-recent_inspections |> 
-  group_by(FRAME, Condition) |> 
-  count() |> 
-  ggplot(aes(n, Condition)) +
-  geom_col() + 
-  facet_wrap(~FRAME, scales="free") + 
-  NULL
-
-```
-
-## D Inspection_Long
-Join inspections and inlets by FACILITYID and GlobalID to create a dataset that includes condition, neighborhood, watershed, and zone
-```{r include=FALSE}
-inspection_long <- 
-  inspection |> 
-  left_join(
-    inlet |> select(-c(CreationDate, edit_date, Creator, Editor, edit_year, edit_month, GlobalID))
-              , by = c('FACILITYID' = 'FACILITYID'))
-
-```
-
-Calculate the number of inlets per district
-```{r include=FALSE}
-n_gsi_district <- 
-  inlet |> 
-  group_by(districts) |> 
-  summarize(  #total_area  = sum(area_m2)
-            , n           = n()
-            ) |> 
-  st_drop_geometry()
-
-zoning |> 
-  group_by(districts) |> 
-  summarise(district_area_m2 = sum(area_m2)) |> 
-  left_join(n_gsi_district, by = 'districts') |> 
-  mutate(gsi_per_district_area = ifelse(is.na(n), 0, n/district_area_m2))
-
-```
-
-### 1 Analysis - Total Inspections
-Inspections by watershed 
-```{r echo=FALSE}
-inspection_long |> 
-  group_by(watershed) |> 
-  count() |> 
-  ggplot(aes(watershed, n)) + 
-  geom_col() + 
-  theme_classic()
-
-```
-Analysis: Inspections focus primarily on the Cove River-Frontal LI Sound watershed
-
-Inspections by watershed and district
-```{r echo=FALSE}
-inspection_long |> 
-  group_by(districts, watershed) |> 
-  count(districts) |> 
-  ggplot(aes(districts, n)) +
-  geom_col() + 
-  facet_wrap(~watershed) + 
-  theme(axis.text.x=element_text(angle = 90)) 
-
-```
-
-Inspections by watershed and neighborhood
-```{r echo=FALSE}
-inspection_long |> 
-  group_by(watershed, Neighborhood) |> 
-  count() |> 
-  ggplot(aes(n, watershed)) +
+inlet |> 
+  st_drop_geometry() |> 
+  group_by(sun_vs_shade, Assigned, watershed) |> 
+  ggplot(aes(sun_vs_shade, Assigned, fill = Assigned)) +
   geom_col() + 
   theme_linedraw() + 
-  facet_wrap(~Neighborhood)
+  theme(axis.text.y = element_blank()) + 
+  facet_grid(~watershed) + 
+  labs(
+    x = "Planting Plan",
+    title = "The Cove River-Frontal Long Island Sound Watershed has the largest number of planting plans",
+    subtitle = "Most are NA and assigned routine cleaning"
+  )
+
+inlet |> 
+  st_drop_geometry() |> 
+  group_by(sun_vs_shade, Assigned, Neighborhood) |> 
+  ggplot(aes(sun_vs_shade, Assigned, fill = Assigned)) + 
+  geom_col()+ 
+  theme_linedraw(12) + 
+  theme(axis.text.y = element_blank()) + 
+  facet_wrap(~Neighborhood) +
+  labs(
+    x = "Planting Plan",
+    title = "The Hill neighborhood has the largest number of planting plans",
+    subtitle = "Most planting plans are NA and assigned routine cleaning"
+  )
+  
+inlet |> 
+  st_drop_geometry() |> 
+  group_by(sun_vs_shade, Assigned, districts) |> 
+  ggplot(aes(sun_vs_shade, Assigned, fill = Assigned)) + 
+  geom_col()+ 
+  theme_linedraw(12) + 
+  theme(axis.text.y = element_blank()) + 
+  facet_wrap(~districts) +
+  labs(
+    x = "Planting Plan",
+    title = "Business and residential districts have the largest number of planting plans",
+    subtitle = "Many inlets in these districts are not assigned either emergency or routine cleaning"
+  )
+  
+```
+
+## 6 Inlet Condition
+### 1 Inlet Condition
+```{r echo=FALSE}
+recent_inspections |> 
+  tabyl(Condition) |> 
+  ggplot(aes(Condition, n, fill = Condition)) +
+  geom_col() + 
+  theme_linedraw(12) +
+  labs(
+    y = "Inlets (number)", 
+    title = "Most inlets are in Poor/Fair condition"
+  )
+
+recent_inspections |> 
+  tabyl(Condition) |> 
+  ggplot(aes(Condition, percent, fill = Condition)) +
+  geom_bar(stat="identity", width =1) +
+  coord_polar("y", start=0) +
+  theme_linedraw(12) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank()
+    ) + 
+  labs(
+    y = "Inlets (percent)", 
+    title = "Most inlets are in Poor/Fair condition"
+  )
 
 ```
-Analysis: Inspections focus primarily on the Cove River-Frontal LI Sound watershed in the Hill Neighborhood
 
-### 2 Analysis - Cleaning Assignments 
-What is in the categories of assigned?
+### 2 Assigned Cleanings
 ```{r echo=FALSE}
 inspection_long |> 
   tabyl(Assigned) |> 
   as_tibble()
 
-```
-
-Assigned by watershed, neighborhood, or district
-```{r echo=FALSE}
 inspection_long |> 
   tabyl(Neighborhood, Assigned) |> 
   as_tibble()
 
 inspection_long |> 
   tabyl(Assigned) |> 
-  ggplot(aes(n, Assigned)) +
+  ggplot(aes(n, Assigned, fill = n)) +
   geom_col() + 
-  theme_linedraw() + 
-  NULL 
+  theme_linedraw(12) + 
+  labs(
+    x = "Inlets", 
+    y = "Cleaning Assignment",
+    title = "Most inlets are assigned emergency cleaning"
+  )
 
-```
-Analysis: Most inlets are assigned emergency cleaning. 
+inspection_long |> 
+  group_by(edit_year, Assigned) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(Assigned, n, fill = Assigned)) +
+  geom_col() + 
+  theme_linedraw(12) +
+  facet_wrap(~edit_year) + 
+  labs(
+    x = "Cleaning Assignment",
+    y = "Inlets",
+    title = "The number of emergency cleanings was greatest from 2021-2023", 
+    subtitle = "This may correlate with inconsistent maintenance during these years"
+  )
 
-Inlet condition by cleaning assignments 
-```{r echo=FALSE}
 inspection_long |> 
   group_by(Assigned, Condition) |> 
   count('Routine Cleaning') |> 
-  ggplot(aes(n, Condition)) + 
+  ggplot(aes(n, Condition, fill = Condition)) + 
   geom_col() + 
   facet_wrap(~Assigned, scales="free") +
-NULL
+  theme_linedraw(12) + 
+  labs(
+    x = "Inspections", 
+    y = "Condition",
+    title = "Cleaning assignment does not measurably impact inlet condition"
+  )
 
-```
-Analysis: The assignment of cleaning does not measurably impact inlet condition.
-
-Inlet condition by cleaning assignment and neighborhood
-```{r echo=FALSE}
 inspection_long |> 
   group_by(Neighborhood, Assigned, Condition) |> 
   count() |> 
   ggplot(aes(n, Condition, fill = Assigned)) +
   geom_col() + 
   theme_linedraw() +
-  facet_wrap(~Neighborhood)
+  facet_wrap(~Neighborhood) + 
+  theme_linedraw(12) + 
+  labs(
+    x = "Inspections", 
+    y = "Condition",
+    title = "Inlets in the Hill Neighborhood have the highest number of inspections and emergency cleanings"
+  )
 
-```
-Analysis: Inlets in the Hill Neighborhood have the highest number of inspections and emergency cleanings
-
-Inlet condition by cleaning assignment and watershed 
-```{r echo=FALSE}
 inspection_long |> 
   group_by(watershed, Assigned, Condition) |> 
   count() |> 
   ggplot(aes(n, Condition, fill = Assigned)) +
   geom_col() + 
   theme_linedraw() +
-  facet_wrap(~watershed)
+  facet_wrap(~watershed) + 
+  theme_linedraw(12) + 
+  labs(
+    x = "Inspections", 
+    y = "Condition",
+    title = "Inlets in the Cove River-Frontal LI Sound watershed have the highest number of inspections and emergency cleanings"
+  )
 
 ```
 
-### 3 Analysis - Condition 
-Inlet condition by watershed and neighborhood
+### 3 Presence of Vegetation, Debris, Oil; Frame Condition
+```{r include=FALSE}
+recent_inspections |> 
+  tabyl(DEBRIS) |> 
+  as_tibble() |> 
+  arrange(desc(n))
+
+```
+
+```{r echo=FALSE}
+recent_inspections |> 
+  group_by(VEGETATION, Condition) |> 
+  count() |> 
+  ggplot(aes(Condition, n, fill = VEGETATION)) +
+  geom_col() + 
+  theme_linedraw(12) +
+  theme(
+    axis.ticks.y = element_blank()
+  ) +
+  labs(
+    x = "Condition", 
+    y = "Inlets",
+    title = "Most inlets did not have vegetation during their most recent inspection"
+  )
+
+recent_inspections |> 
+  group_by(Condition, OIL) |> 
+  count() |> 
+  ggplot(aes(Condition, n, fill = OIL)) +
+  geom_col() + 
+  theme_linedraw(12) +
+  theme(
+    axis.ticks.y = element_blank()
+  ) +
+  labs(
+    x = "Condition", 
+    y = "Inlets",
+    title = "Most inlets did not have oil during their most recent inspection"
+  )
+
+recent_inspections |> 
+  group_by(DEBRIS, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = DEBRIS)) + 
+  geom_col() + 
+  theme_linedraw(12) +
+  theme(
+    axis.ticks.y = element_blank()
+  ) +
+  labs(
+    x = "Number of Inlets", 
+    title = "Most inlets had debris during their most recent inspection"
+  )
+
+recent_inspections |> 
+  group_by(FRAME, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = Condition)) +
+  geom_col() + 
+  facet_wrap(~FRAME) + 
+  theme_linedraw(12) +
+  theme(
+    axis.ticks.y = element_blank()
+  ) +
+  labs(
+    x = "Inlets", 
+    title = "Only a few inlets needed a frame repair"
+  )
+
+
+inlet_recent_inspections |> 
+  group_by(FRAME, district_category, Condition) |> 
+  count() |> 
+  ggplot(aes(n, district_category, fill = Condition)) +
+  geom_col() + 
+  theme_linedraw(12) + 
+  facet_wrap(~FRAME) + 
+  labs(
+    x = "Inlets",
+    y = "District Category", 
+    title = "Frame inspections by district category and condition",
+    subtitle = "The highest number of frame repairs occurs in high-middle density districts"
+  )
+
+```
+
+### 4 By Watershed, Neighborhood, District, and District Category
 ```{r echo=FALSE}
 inspection_long |> 
   ggplot(aes(Condition, fill = Neighborhood)) +
   geom_bar() +
   facet_wrap(~watershed, scales = "free_y") + 
+  theme_linedraw(12) + 
   theme(axis.text.x=element_text(angle = 90)) +
-NULL 
+  labs(
+    x = "Condition", 
+    y = "Inspections",
+    title = "Inlet condition by watershed and neighborhood"
+  )
 
-```
-
-Inlet condition by edit month
-```{r echo=FALSE}
-inspection_long |> 
-  group_by(edit_month, Condition) |> 
-  summarize(n=n()) |> 
-  ggplot(aes(n, Condition, fill = Condition)) +
-  geom_col() +
-  theme_bw(16) + 
-  facet_wrap(~edit_month, nrow=3) + 
-  NULL
-
-```
-
-Inlet condition by presence of debris
-```{r echo=FALSE}
-inspection_long |> 
-  group_by(DEBRIS, Condition) |> 
-  count() |> 
-  ggplot(aes(n, Condition, fill = Condition)) +
-  geom_col() + 
-  facet_wrap(~DEBRIS) + 
-  NULL
-
-```
-Analysis: There is no discernible correlation between inlet condition and the presence of debris.
-
-## E Inlet_Recent_Inspections
-Combines neighborhood, watershed, and district data with recent inspections data
-```{r include=FALSE}
-inlet_recent_inspections <- 
-  inlet |> 
-  left_join(
-    recent_inspections |> select(GlobalID, ASSETGUID, FACILITYID, DEBRIS, VEGETATION, OIL, FRAME, Condition, islegit)
-    , by = c('GlobalID' = 'ASSETGUID'))
-
-```
-
-### 1 Analysis 
-```{r echo=FALSE}
-inlet_recent_inspections |> 
-  st_drop_geometry() |> 
-  group_by(Condition, islegit) |> 
-  count()
-
-```
-
-Inlet condition by watershed
-```{r echo=FALSE}
 inlet_recent_inspections |> 
   group_by(watershed, Condition) |> 
   count() |> 
   ggplot(aes(n, Condition, fill = Condition)) +
   geom_col() +
-  theme_bw(16) +
+  theme_linedraw(12) +
   theme(legend.position = "bottom") +
   facet_wrap(~watershed) +
-  NULL
+  labs(
+    x = "Inlets", 
+    title = "Most inlets in the Cove River-Frontal Long Island Sound and West River Watersheds were in fair/poor condition", 
+    subtitle = "Not enough inlets in other watersheds to determine if watershed and inlet condition are causally linked"
+  )
 
-```
+inlet_recent_inspections |> 
+  group_by(Neighborhood, Condition) |> 
+  count() |> 
+  ggplot(aes(n, Condition, fill = Condition)) +
+  geom_col() +
+  theme_linedraw(12) +
+  theme(legend.position = "bottom") +
+  facet_wrap(~Neighborhood) +
+  labs(
+    x = "Inlets", 
+    title = "Most inlets are located in the Dwight and Hill neighborhoods", 
+    subtitle = "Not enough inlets in other neighborhoods to determine if neighborhood and inlet condition are causally linked"
+  )
 
-Inlet condition by district
-```{r echo=FALSE}
 inlet_recent_inspections |> 
   group_by(districts, Condition) |> 
   count() |> 
   ggplot(aes(n, Condition, fill = Condition)) +
   geom_col() + 
-  theme_bw(16) +
+  theme_linedraw(12) +
   theme(legend.position = "bottom") +
-  facet_wrap(~districts, scales="free") +
-  NULL
+  facet_wrap(~districts) +
+  labs(
+    x = "Inlets", 
+    title = "Most inlets in business and residential districts were in fair/poor condition", 
+    subtitle = "Not enough inlets in other districts to determine if district and inlet condition are causally linked"
+  )
 
-```
-
-Inlet condition by district and watershed
-```{r echo=FALSE}
 inlet_recent_inspections |> 
   group_by(watershed, districts, Condition) |> 
   count() |> 
   ggplot(aes(Condition, n, fill = districts)) +
   geom_col() + 
-  facet_wrap(~watershed, scales="free") +
+  facet_wrap(~watershed) +
+  theme_linedraw(12) + 
   theme(axis.text.x=element_text(angle = 90)) + 
-  NULL
+  labs(
+    y = "Inlets", 
+    title = "Inlet condition by watershed and district",
+    subtitle = "Most inlets were located in business districts in the Cove River-Frontal LI Sound Watershed"
+  )
 
-```
-
-Inlet condition by edit month and district category
-```{r echo=FALSE}
-inlet_recent_inspections |> 
-  group_by(edit_month, Condition, district_category) |> 
-  summarize(n=n()) |> 
-  ggplot(aes(district_category, n, fill = Condition)) +
-  geom_col() +
-  theme_bw(10) + 
-  facet_wrap(~edit_month, nrow=3) + 
-  theme(axis.text.x=element_text(angle = 90)) +
-  NULL
-
-```
-Analysis: Most inspections occur April through July.
-
-Recent inspections by district category 
-```{r echo=FALSE}
-inlet_recent_inspections |> 
-  group_by(district_category) |> 
-  count()|> 
-  ggplot(aes(district_category, n)) +
-  geom_col() +
-  theme_bw(10) +
-  theme(axis.text.x=element_text(angle = 90)) + 
-  NULL
-
-```
-Analysis: The least number of inspections occur in residential districts.
-
-Condition of recent inspections by district category
-```{r echo=FALSE}
 inlet_recent_inspections |> 
   group_by(district_category, Condition) |> 
   count()|> 
   ggplot(aes(district_category, n, fill = Condition)) +
   geom_col() +
-  theme_bw(10) +
-  theme(axis.text.x=element_text(angle = 90))
+  theme_linedraw(12) +
+  theme(axis.text.x=element_text(angle = 90)) +
+  labs(
+    x = "District Category",
+    y = "Inlets", 
+    title = "Condition of recent inspections by district category",
+    subtitle = "Inlets in very good condition are found in general business and planned development districts"
+  )
 
 ```
-
-Frame inspections by district category
-```{r echo=FALSE}
-inlet_recent_inspections |> 
-  group_by(FRAME, district_category) |> 
-  count() |> 
-  ggplot(aes(n, district_category)) +
-  geom_col() + 
-  theme_bw(10) + 
-  facet_wrap(~FRAME) + 
-  NULL
-
-```
-Analysis: Most frame repair inspections occur in high-middle density districts.
-
-Remaining questions/potential graphs: 
-- Inlet condition by neighborhood
-- Inlet condition by neighborhood, districts, and district categories
-- When do inspections occur (month, year) by neighborhood, districts, and district categories?
-- When do inspections occur (month, year) by neighborhood, districts, cleaning type, and sun_vs_shade? 
-
-## F Parks
-```{r echo=FALSE}
-(parks <- st_read('input_data/NewHavenParksLayers_08032021/NewHavenParks.shp'))
-
-parks |> mapview()
-
-mapview(parks) +
-  mapview(neighs, zcol = "Neighborhood", layer.name = "neighborhood") +
-  mapview(inlet)
-
-```
-
-## G Parcels
-```{r echo=FALSE}
-```
-
-
-
