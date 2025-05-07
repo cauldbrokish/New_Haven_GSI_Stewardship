@@ -13,13 +13,14 @@ editor_options:
 
 # Load libraries 
 packs <-c('tidyverse'   # cuz
-          , 'tidylog'   # prints out what was done in dplyr and tidyr; VERBOSE
+          # , 'tidylog'   # prints out what was done in dplyr and tidyr; VERBOSE
           # , 'tidygeocoder' # geocode addressses
           , 'tidycensus'   # access Census data
           , 'sf'           # for spatial data support
           , 'mapview'      # web maps for zooming and panning around
           , 'janitor'   # helps clean things pipe-friendly cross-tabulations
           , 'leafsync'  # linked maps
+          , 'magrittr'       # all of the pipes
           )
 
 if (length(setdiff(packs, rownames(installed.packages()))) > 0) {
@@ -238,19 +239,26 @@ gsi_per_neigh <-
 
 # HelpMe_Dexter: is there a way to make the labels on these mapviews more helpful (more sensitive to smaller numbers or change the numbers? I added a inlets per neighborhood mapview to the Analysis Section 3.1 so maybe its redundant now here)
 
+# multiply those really small numbers by 1000
+# use the 'layer.name' argument more advantageously
+# (UPDATE, that's what you did below)
+
 neighs |> 
   left_join(gsi_per_neigh, by = 'Neighborhood') |> 
-  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, n / area_m2)) |> 
-  mapview(zcol = 'gsi_per_neigh_area', layer.name = 'gsi_per_neigh_area')
+  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, 1000*(n / area_m2))) |> 
+  mapview(zcol = 'gsi_per_neigh_area', layer.name = 'YOUR<br>NICE<br>NAME')
 
 # HelpMe_Dexter: R says there is an error because "argument is of length zero". . . 
+# I'm not getting that error, which is good, but I added the magrittr package
+# which contains the '%>%' function
 neighs |> 
   left_join(gsi_per_neigh, by = "Neighborhood") %>%
-  mutate(n = ifelse(is.na(n), 0, n)
-         , area_m2 = st_area(.)
-         , gsi_per_area = n / area_m2
-         ) 
-  mapview(zcol = 'gsi_per_area', layer.name = 'GSI counts /<br>neigh area')
+  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, 1000*(n / area_m2))) |> 
+  # mutate(n = ifelse(is.na(n), 0, n)
+  #        , area_m2 = st_area(.)
+  #        , gsi_per_area = n / area_m2
+  #        ) |> 
+  mapview(zcol = 'gsi_per_neigh_area', layer.name = 'GSI counts /<br>neigh area<br>*1000')
   
 ```
 
@@ -332,7 +340,7 @@ gsi_per_neigh |>
   ggplot(aes(Neighborhood, n, fill = n)) + 
   geom_col() + 
   theme_linedraw(12) + 
-  theme(axis.text.x=element_text(angle = 90)) +
+  theme(axis.text.x=element_text(angle = 90, hjust = 1, vjust = .5)) +
   labs (
     x = "Neighborhood",
     y = "Inlets",
@@ -441,8 +449,10 @@ inspection_freq |>
 ```
 
 Distribution of frequencies
-```{r echo=FALSE}
+```{r eval=FALSE, include=FALSE}
 #HelpMe_Dexter: remind me what inspection_freq_freq was for? Is it still necessary to include given the above graphs? 
+
+# how many times do you have 2 per, how many 3 per.. no need to keep
 
 inspection_freq_freq <- 
   inspection_freq |> 
@@ -539,11 +549,11 @@ inlet |>
 inlet |> 
   st_drop_geometry() |> 
   group_by(sun_vs_shade, Assigned, watershed) |> 
-  ggplot(aes(sun_vs_shade, Assigned, fill = Assigned)) +
-  geom_col() + 
+  ggplot(aes(sun_vs_shade, fill = Assigned)) + 
+  geom_bar() + # changed to geom_bar from geom_col
   theme_linedraw() + 
-  theme(axis.text.y = element_blank()) + 
-  facet_grid(~watershed) + 
+  theme(axis.text.y = element_blank(), legend.position = 'bottom') + 
+  facet_grid(~str_wrap(watershed, 25)) + # wrapping
   labs(
     x = "Planting Plan",
     title = "The Cove River-Frontal Long Island Sound Watershed has the largest number of planting plans",
@@ -638,6 +648,7 @@ inspection_long |>
   ggplot(aes(Assigned, n, fill = Assigned)) +
   geom_col() + 
   theme_linedraw(12) +
+  theme(axis.text.x=element_text(angle = 90)) +
   facet_wrap(~edit_year) + 
   labs(
     x = "Cleaning Assignment",
