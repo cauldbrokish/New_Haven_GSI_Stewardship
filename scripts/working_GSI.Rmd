@@ -652,6 +652,13 @@ gsi_per_neigh <-
   group_by(Neighborhood) |> 
   count()
 
+gsi_per_neigh <- 
+  inlet |> 
+  ungroup() |> 
+  st_drop_geometry() |> 
+  group_by(Neighborhood) |> 
+  count()
+
 # Frame Tibble? I can't remember what this refers to 
 recent_inspections |> 
   group_by(FRAME, Condition) |> 
