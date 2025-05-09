@@ -52,7 +52,7 @@ neighs |> mapview(zcol = "area_m2")
 
 ```
 
-## B Watersheds and Zoning
+## B Watersheds
 ```{r include=FALSE}
 
 sheds <- 
@@ -62,10 +62,12 @@ sheds <-
 ```
 
 ```{r echo=FALSE}
-mapview(neighs, alpha.regions = 0, lwd = 2) + mapview(sheds, zcol = 'Name') 
+mapview(neighs, alpha.regions = 0, lwd = 2) + 
+  mapview(sheds, zcol = 'Name') 
 
 ```
 
+## C Zoning
 ```{r include=FALSE}
 zoning <- 
   st_read('../GSI STEWARDSHIP Project_data_too_big/_ags_data0AA96A07DF994B819C3A75306E2DD073.gdb') |> 
@@ -76,9 +78,7 @@ zoning <-
 ```
 
 ```{r echo=FALSE}
-zoning |> mapview(zcol = 
-                    'districts'
-                  )
+zoning |> mapview(zcol = 'districts')
 
 ```
 
@@ -96,7 +96,7 @@ zoning |>
 
 ```
 
-## C Parks
+## D Parks
 ```{r include=FALSE}
 parks <- st_read('input_data/NewHavenParksLayers_08032021/NewHavenParks.shp')
 
@@ -213,15 +213,14 @@ mutate(Condition=factor(CONDITION,
 
 ```{r echo=FALSE}
 inspection |> 
-  tabyl(CONDITION, islegit) |> 
-  pivot_longer(-CONDITION, names_to = "islegit") |> 
-  ggplot(aes(value, CONDITION, fill = CONDITION)) +
+  tabyl(islegit) |> 
+  ggplot(aes(islegit, percent, fill = islegit)) +
   geom_col() + 
-  facet_wrap(~islegit) + 
   theme_linedraw(12) +
+  theme(legend.position = "bottom", 
+        axis.title.x = element_blank()) +
   labs(
-    x = "Number of Inspections", 
-    y = "Number of Inlets",
+    y = "Inspections (percentage)",
     title = "Most total inspections are legit"
   )
 
@@ -278,25 +277,26 @@ recent_inspections <-
   inspection |> 
   group_by(ASSETGUID) |> 
   arrange(edit_date) |> 
+  mutate(CONDITION=factor(CONDITION,levels=c("Unknown", NA, "Very Poor", "Poor", "Fair", "Good", "Very Good", "Excellent"))) |> 
   slice(1) |>  
   ungroup()
-
+    
 recent_inspections |> 
   tabyl(CONDITION) |> 
   as_tibble()
+
 ```
 
 ```{r echo=FALSE}
 recent_inspections |> 
-  tabyl(Condition, islegit) |> 
-  pivot_longer(-Condition, names_to = "islegit") |> 
-  ggplot(aes(value, Condition, fill = Condition)) +
+  tabyl(islegit) |> 
+  ggplot(aes(islegit, percent, fill = islegit)) +
   geom_col() + 
-  facet_wrap(~islegit) + 
   theme_linedraw(12) +
-  labs(
-    x = "Number of Inspections", 
-    y = "Number of Inlets",
+  theme(legend.position = "bottom", 
+        axis.title.x = element_blank()) +
+labs(
+    y = "Inspections (percentage)", 
     title = "Most recent inspections are legit"
   )
 
@@ -324,29 +324,27 @@ inlet_recent_inspections |>
 n_gsi_watershed |> 
   st_drop_geometry() |> 
   group_by(n, watershed) |> 
-  ggplot(aes(watershed, n, fill = n)) + 
+  ggplot(aes(n, watershed, fill = n)) + 
   geom_col() + 
   theme_linedraw(12) + 
-  theme(axis.text.x=element_text(angle = 90, hjust = 1, vjust = .5)) +
   labs (
-    x = "Watershed",
-    y = "Inlets",
-    title = "Most inlets are located in the Cove River-Frontal LI Sound Watershed"
+    x = "Inlets",
+    y = "Watershed",
+    title = str_wrap("Most inlets are located in the Cove River-Frontal LI Sound Watershed", 50)
   )  
 
-mapview(sheds, zcol = "Name", layer.name = "Watershed") +
+mapview(sheds, zcol = "Name", layer.name = "Watershed", legend = FALSE) +
   mapview(inlet)
   
 gsi_per_neigh |> 
   st_drop_geometry() |> 
   group_by(n, Neighborhood) |> 
-  ggplot(aes(Neighborhood, n, fill = n)) + 
+  ggplot(aes(n, Neighborhood, fill = n)) + 
   geom_col() + 
   theme_linedraw(12) + 
-  theme(axis.text.x=element_text(angle = 90, hjust = 1, vjust = .5)) +
   labs (
-    x = "Neighborhood",
-    y = "Inlets",
+    x = "Inlets",
+    y = "Neighborhood",
     title = "Most inlets are located in the Hill Neighborhood"
   )
 
@@ -361,6 +359,21 @@ neighs |>
   left_join(gsi_per_neigh, by = 'Neighborhood') |> 
   mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, 1000*(n / area_m2))) |>
   mapview(zcol = 'gsi_per_neigh_area', layer.name = 'GSI counts /<br>neigh area<br>*1000')
+
+neighs |> 
+  left_join(gsi_per_neigh, by = 'Neighborhood') |> 
+  mutate(gsi_per_neigh_area = ifelse(is.na(n), 0, 1000*(n / area_m2))) |>
+  st_drop_geometry() |> 
+  group_by(Neighborhood, gsi_per_neigh_area) |> 
+  ggplot(aes(gsi_per_neigh_area, Neighborhood, fill = gsi_per_neigh_area)) + 
+  geom_col() +
+  theme_linedraw() + 
+  labs(
+    x = "Inlets per Neighborhood Area", 
+    y = "Count", 
+    title = "The Dwight neighborhood has the highest inlet density", 
+    subtitle = "Most neighborhoods have no inlets"
+  )
 
 n_gsi_district |> 
   st_drop_geometry() |> 
@@ -401,18 +414,18 @@ inspection_freq |>
   ggplot(aes(n, percent, fill = percent)) + 
   geom_col() +
   theme_linedraw(12) + 
-  scale_x_binned() + 
   labs(
+    x = "Number of Inspections",
     y = "Percent",
-    title = str_wrap("The majority of inlets have been inspected roughly four times between 2021 and 2025", 65)
+    title = str_wrap("The majority of inlets have been inspected three to four times between 2021 and 2025", 65)
   )
 
 inspection_freq |> 
   ggplot(aes(n, valid_percent, fill = valid_percent)) + 
   geom_col() +
   theme_linedraw(12) + 
-  scale_x_binned() + 
   labs(
+    x = "Number of Inspections",
     y = "Valid Percent",
     title = str_wrap("The results for valid percent of inspections are similar to the results for percent (above)", 65),
   )
@@ -424,23 +437,21 @@ inspection_freq |>
 inspection_long |> 
   group_by(watershed) |> 
   count() |> 
-  ggplot(aes(watershed, n, fill =  n)) + 
+  ggplot(aes(n, watershed, fill =  n)) + 
   geom_col() + 
   theme_linedraw(12) +
-  theme(axis.text.x=element_text(angle = 90, hjust = 1, vjust = .5)) +
   labs(
-    x = "Watershed", 
-    y = "Inspections",
-    title = str_wrap("Most inspections occur in the Cove River-Frontal LI Sound watershed", 65)
+    x = "Inspections", 
+    y = "Watershed",
+    title = str_wrap("Most inspections occur in the Cove River-Frontal LI Sound watershed", 50)
   )
 
 inspection_long |> 
   group_by(Neighborhood) |> 
   count() |> 
-  ggplot(aes(Neighborhood, n, fill = n)) +
+  ggplot(aes(n, Neighborhood, fill = n)) +
   geom_col() + 
   theme_linedraw(12) + 
-  theme(axis.text.x=element_text(angle = 90, hjust = 1, vjust = .5)) +
   labs(
     x = "Inspections", 
     y = "Neighborhood",
@@ -450,43 +461,44 @@ inspection_long |>
 inspection_long |> 
   group_by(districts) |> 
   count(districts) |> 
-  ggplot(aes(districts, n, fill = n)) +
+  ggplot(aes(n, districts, fill = n)) +
   geom_col() + 
   theme_linedraw(12) + 
-  theme(axis.text.x=element_text(angle = 90, , hjust = 1, vjust = .5)) +
   labs(
-    x = "Districts", 
-    y = "Inspections",
+    x = "Inspections", 
+    y = "Districts",
     title = "Most inspections occur in residential districts"
   )
 
 ```
 
-For watersheds, neighborhoods, and districts, the timing of inspection over month and year followed the same pattern as below. 
+For watersheds, neighborhoods, and districts, the timing of inspection over month and year followed the pattern outlined below. 
 ```{r echo=FALSE}
 inspection_long |> 
   group_by(districts, edit_month) |> 
   count() |> 
   ggplot(aes(edit_month, n, color =  districts)) + 
+  geom_point() + 
   geom_line() + 
   theme_linedraw(12) +
   scale_x_binned() + 
   labs(
     x = "Month", 
-    y = "Inlet Inspections",
-    title = str_wrap("Most inspections were carried out in January, April, and December", 65)
+    y = "Inspections",
+    title = str_wrap("Most inspections were carried out in January, April, and November", 65)
   )
 
 inspection_long |> 
   group_by(Neighborhood, edit_year) |> 
   count() |> 
   ggplot(aes(edit_year, n, color = Neighborhood)) + 
+  geom_point() + 
   geom_line() + 
   theme_linedraw(12) +
   theme(legend.position = 'bottom') + 
   labs(
     x = "Year", 
-    y = "Inlet Inspections",
+    y = "Inspections",
     title = str_wrap("Inlets and inspections have diversified across watershed, neighborhood, and district measures since 2023", 65)
   )
 
@@ -526,23 +538,29 @@ recent_inspections |>
 inspection_long |> 
   group_by(edit_month, Condition) |> 
   summarize(n=n()) |> 
-  ggplot(aes(n, Condition, fill = Condition)) +
+  ggplot(aes(Condition, n, fill = Condition)) +
   geom_col() +
-  theme_linedraw(12) +  
+  theme_linedraw(12) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.position = "bottom") + 
   facet_wrap(~edit_month, nrow=3) + 
   labs(
-    x = "Inspections", 
-    y = "Condition",
+    y = "Inspections",
     title = str_wrap("Inlets inspected in January and December are consistently in fair condition", 60)
   )
 ```
 
 ## E Planting Plan (sun_vs_shade)
-```{r echo=FALSE}
+```{r include=FALSE}
 inlet |>
   st_drop_geometry() |> 
   tabyl(Planting_Plan, sun_vs_shade)
 
+```
+
+```{r echo=FALSE}
 inlet |> 
   st_drop_geometry() |>
   tabyl(sun_vs_shade) |> 
@@ -562,12 +580,14 @@ inlet |>
   ggplot(aes(sun_vs_shade, fill = Assigned)) + 
   geom_bar() + # changed to geom_bar from geom_col
   theme_linedraw() + 
-  theme(axis.text.y = element_blank(), legend.position = 'bottom') + 
+  theme(axis.text.y = element_blank(), legend.position = 'bottom', 
+        axis.title.y = element_blank(), 
+        axis.ticks.y = element_blank()) + 
   facet_grid(~str_wrap(watershed, 25)) +
   labs(
     x = "Planting Plan",
     title = str_wrap("The Cove River-Frontal Long Island Sound Watershed has the largest number of planting plans", 70),
-    subtitle = "Most are NA and assigned routine cleaning"
+    subtitle = "Most are NA or assigned routine cleaning"
   )
 
 inlet |> 
@@ -576,8 +596,10 @@ inlet |>
   ggplot(aes(sun_vs_shade, Assigned, fill = Assigned)) + 
   geom_col()+ 
   theme_linedraw(12) + 
-  theme(axis.text.y = element_blank()) + 
-  facet_wrap(~str_wrap(Neighborhood, 25)) +
+  theme(axis.text.y = element_blank(), 
+        axis.title.y = element_blank(), 
+        axis.ticks.y = element_blank()) + 
+  facet_wrap(~str_wrap(Neighborhood, 20)) +
   labs(
     x = "Planting Plan",
     title = "The Hill neighborhood has the largest number of planting plans",
@@ -590,7 +612,9 @@ inlet |>
   ggplot(aes(sun_vs_shade, Assigned, fill = Assigned)) + 
   geom_col()+ 
   theme_linedraw(12) + 
-  theme(axis.text.y = element_blank()) + 
+  theme(axis.text.y = element_blank(), 
+        axis.title.y = element_blank(), 
+        axis.ticks.y = element_blank()) + 
   theme(legend.position = "bottom") +
   facet_wrap(~districts) +
   labs(
@@ -601,8 +625,106 @@ inlet |>
   
 ```
 
-## F Inlet Condition
-### F1 Inlet Condition
+## F Assigned Cleanings
+```{r include=FALSE}
+inspection_long |> 
+  tabyl(Neighborhood, Assigned) |> 
+  as_tibble()
+
+```
+
+```{r echo=FALSE}
+inspection_long |> 
+  tabyl(Assigned) |> 
+  ggplot(aes(n, Assigned, fill = n)) +
+  geom_col() + 
+  theme_linedraw(12) + 
+  labs(
+    x = "Inlets", 
+    y = "Cleaning Assignment",
+    title = "Most inlets are assigned emergency cleaning"
+  )
+
+inspection_long |> 
+  group_by(edit_year, Assigned) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(Assigned, n, fill = Assigned)) +
+  geom_col() + 
+  theme_linedraw(12) +
+  theme(legend.position = "bottom") +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+  facet_wrap(~edit_year) + 
+  labs(
+    x = "Cleaning Assignment",
+    y = "Inlets",
+    title = "The number of emergency cleanings was greatest from 2021-2023", 
+    subtitle = "This may correlate with inconsistent maintenance during these years"
+  )
+
+inspection_long |> 
+  group_by(edit_month, Assigned) |> 
+  summarize(n=n()) |> 
+  ggplot(aes(edit_month, n, color = Assigned)) + 
+  geom_point() + 
+  geom_line() + 
+  theme_linedraw(12) + 
+  scale_x_binned() + 
+  labs(
+    x = "Month",
+    y = "Inlets",
+    title = "Emergency cleanings are highest in January, April, and December", 
+    subtitle = "Other cleaning types are steady throughout the year"
+  )
+
+inspection_long |> 
+  group_by(Assigned, Condition) |> 
+  count('Routine Cleaning') |> 
+  ggplot(aes(Condition, n, fill = Condition)) + 
+  geom_col() + 
+  facet_wrap(~Assigned, scales="free") +
+  theme_linedraw(12) + 
+  theme(legend.position = "bottom") +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  labs(
+    y = "Inspections",
+    title = "Cleaning assignment does not measurably impact inlet condition"
+  )
+
+inspection_long |> 
+  group_by(Neighborhood, Assigned) |> 
+  count() |> 
+  ggplot(aes(n, Neighborhood, fill = Assigned)) +
+  geom_col() + 
+  theme_linedraw() +
+  theme(legend.position = "bottom") +
+  theme_linedraw(12) + 
+  labs(
+    x = "Inspections", 
+    y = "Neighborhood",
+    title = str_wrap("Inlets in the Hill Neighborhood have the highest number of inspections and emergency cleanings", 65)
+  )
+
+inspection_long |> 
+  group_by(watershed, Assigned) |> 
+  count() |> 
+  ggplot(aes(n, watershed, fill = Assigned)) +
+  geom_col() + 
+  theme_linedraw() +
+  theme_linedraw(12) + 
+  labs(
+    x = "Inspections", 
+    y = "Watershed",
+    title = str_wrap("Inlets in the Cove River-Frontal LI Sound watershed have the highest number of inspections and emergency cleanings", 65)
+  )
+
+```
+
+## G Inlet Condition
+### G1 Inlet Condition
 ```{r echo=FALSE}
 recent_inspections |> 
   tabyl(Condition) |> 
@@ -632,102 +754,7 @@ recent_inspections |>
 
 ```
 
-### F2 Assigned Cleanings
-```{r echo=FALSE}
-inspection_long |> 
-  tabyl(Neighborhood, Assigned) |> 
-  as_tibble()
-
-inspection_long |> 
-  tabyl(Assigned) |> 
-  ggplot(aes(n, Assigned, fill = n)) +
-  geom_col() + 
-  theme_linedraw(12) + 
-  labs(
-    x = "Inlets", 
-    y = "Cleaning Assignment",
-    title = "Most inlets are assigned emergency cleaning"
-  )
-
-inspection_long |> 
-  group_by(edit_year, Assigned) |> 
-  summarize(n=n()) |> 
-  ggplot(aes(Assigned, n, fill = Assigned)) +
-  geom_col() + 
-  theme_linedraw(12) +
-  theme(legend.position = "bottom") +
-  theme(axis.text.x=element_text(angle = 90)) +
-  facet_wrap(~edit_year) + 
-  labs(
-    x = "Cleaning Assignment",
-    y = "Inlets",
-    title = "The number of emergency cleanings was greatest from 2021-2023", 
-    subtitle = "This may correlate with inconsistent maintenance during these years"
-  )
-
-inspection_long |> 
-  group_by(edit_month, Assigned) |> 
-  summarize(n=n()) |> 
-  ggplot(aes(edit_month, n, color = Assigned)) + 
-  geom_point() + 
-  geom_line() + 
-  theme_linedraw(12) + 
-  scale_x_binned() + 
-  labs(
-    x = "Month",
-    y = "Inlets",
-    title = "Emergency cleanings are highest in January, April, and December", 
-    subtitle = "Other cleaning types are steady throughout the year"
-  )
-
-inspection_long |> 
-  group_by(Assigned, Condition) |> 
-  count('Routine Cleaning') |> 
-  ggplot(aes(n, Condition, fill = Condition)) + 
-  geom_col() + 
-  facet_wrap(~Assigned, scales="free") +
-  theme_linedraw(12) + 
-  theme(legend.position = "bottom") +
-  theme(axis.text.x=element_text(angle = 90)) +
-  labs(
-    x = "Inspections", 
-    y = "Condition",
-    title = "Cleaning assignment does not measurably impact inlet condition"
-  )
-
-inspection_long |> 
-  group_by(Neighborhood, Assigned, Condition) |> 
-  count() |> 
-  ggplot(aes(n, Condition, fill = Assigned)) +
-  geom_col() + 
-  theme_linedraw() +
-  theme(legend.position = "bottom") +
-  facet_wrap(~Neighborhood) + 
-  theme_linedraw(12) + 
-  labs(
-    x = "Inspections", 
-    y = "Condition",
-    title = str_wrap("Inlets in the Hill Neighborhood have the highest number of inspections and emergency cleanings", 65)
-  )
-
-inspection_long |> 
-  group_by(watershed, Assigned, Condition) |> 
-  count() |> 
-  ggplot(aes(n, Condition, fill = Assigned)) +
-  geom_col() + 
-  theme_linedraw() +
-  theme(legend.position = "bottom") +
-  facet_wrap(~str_wrap(watershed, 25)) + 
-  theme_linedraw(12) + 
-  labs(
-    x = "Inspections", 
-    y = "Condition",
-    title = str_wrap("Inlets in the Cove River-Frontal LI Sound watershed have the highest number of inspections and emergency cleanings", 65)
-  )
-
-```
-
-### F3 Presence of Vegetation, Debris, Oil; Frame Condition
+### G2 Presence of Vegetation, Debris, Oil; Frame Condition
 ```{r include=FALSE}
 recent_inspections |> 
   tabyl(DEBRIS) |> 
@@ -748,7 +775,7 @@ recent_inspections |>
   ) +
   labs(
     x = "Condition", 
-    y = "Inlet Inspections",
+    y = "Inspections",
     title = "Most inlets did not have vegetation during their most recent inspection"
   )
 
@@ -762,9 +789,9 @@ inspection_long |>
   scale_x_binned() + 
   labs(
     x = "Month",
-    y = "Inlet Inspections",
+    y = "Inspections",
     title = "The lack of vegetation did not depend on inspection month", 
-    subtitle = str_wrap("Variations in no responses could be attributed to number of inlets inspected during that month", 65)
+    subtitle = str_wrap("Variations in no responses could be attributed to total number of inlets inspected during that month", 65)
   )
 
 recent_inspections |> 
@@ -778,7 +805,7 @@ recent_inspections |>
   ) +
   labs(
     x = "Condition", 
-    y = "Inlet Inspections",
+    y = "Inspections",
     title = "No inlets had oil during their most recent inspection"
   )
 
@@ -792,7 +819,7 @@ recent_inspections |>
     axis.ticks.y = element_blank()
   ) +
   labs(
-    y = "Inlet Inspections", 
+    y = "Inspections", 
     title = "Most inlets had debris during their most recent inspection"
   )
 
@@ -805,9 +832,9 @@ inspection_long |>
   theme_linedraw(12) + 
   labs(
     x = "Year",
-    y = "Inlet Inspections",
+    y = "Inspections",
     title = str_wrap("The number of inlets with debris has dramatically decreased over time", 60), 
-    subtitle = str_wrap("This is not echoed in variations in the no response", 65)
+    subtitle = str_wrap("This is not reflected in variations in the no response", 65)
   )
 
 recent_inspections |> 
@@ -818,12 +845,14 @@ recent_inspections |>
   facet_wrap(~FRAME) + 
   theme_linedraw(12) +
   theme(
-    axis.ticks.y = element_blank(), 
-    axis.text.x = element_blank()
+    axis.ticks.x = element_blank(), 
+    axis.text.x = element_blank(), 
+    axis.ticks.y = element_blank()
   ) +
   labs(
-    y = "Inlet Inspections", 
-    title = "Only a handful of inlets needed a frame repair"
+    y = "Inspections", 
+    title = "Only a handful of inlets needed a frame repair", 
+    subtitle = "Frame repair did not depend on condition"
   )
 
 inspection_long |> 
@@ -835,7 +864,7 @@ inspection_long |>
   theme_linedraw(12) + 
   labs(
     x = "Year",
-    y = "Inlet Inspections",
+    y = "Inspections",
     title = str_wrap("The number of inlets in need of frame repair has remained steady and decreased over time", 60) 
   )
 
@@ -847,15 +876,15 @@ inlet_recent_inspections |>
   theme_linedraw(12) + 
   facet_wrap(~FRAME) + 
   labs(
-    x = "Inlets",
+    x = "Inspections",
     y = "District Category", 
     title = "Frame inspections by district category and condition",
-    subtitle = str_wrap("The highest number of frame repairs occurs in high-middle density districts", 60)
+    subtitle = str_wrap("The highest number of frame repairs occurs in high-middle density districts regardless of condition", 60)
   )
 
 ```
 
-### F4 By Watershed, Neighborhood, District, and District Category
+### G3 By Watershed, Neighborhood, District, and District Category
 ```{r echo=FALSE}
 inspection_long |> 
   group_by(Condition, watershed, Neighborhood) |> 
@@ -869,20 +898,24 @@ inspection_long |>
     x = "Condition", 
     y = "Inspections",
     title = "Inlet condition by watershed and neighborhood", 
-    subtitle = str_wrap("Most inlets were in fair or lower condition", 65)
+    subtitle = str_wrap("Most inlets were in fair or worse condition regardless of watershed", 65)
   )
 
 inlet_recent_inspections |> 
   group_by(districts, Condition) |> 
   count() |> 
-  ggplot(aes(n, Condition, fill = Condition)) +
+  ggplot(aes(Condition, n, fill = Condition)) +
   geom_col() + 
   theme_linedraw(12) +
-  theme(legend.position = "bottom") +
+  theme(legend.position = "bottom", 
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()) +
   facet_wrap(~districts) +
   labs(
-    x = "Inlets", 
-    title = str_wrap("Most inlets in business and residential districts were in fair/poor condition", 65)
+    y = "Inspections", 
+    title = "Inlet condition by district",
+    subtitle = str_wrap("Most inlets in business and residential districts were in fair/poor condition", 65)
   )
 
 inlet_recent_inspections |> 
@@ -893,9 +926,8 @@ inlet_recent_inspections |>
   facet_wrap(~watershed) +
   theme_linedraw(12) + 
   theme(axis.text.x=element_text(angle = 90)) + 
-  theme(legend.position = "bottom") +
   labs(
-    y = "Inlets", 
+    y = "Inspections", 
     title = "Inlet condition by watershed and district"
     )
 
@@ -906,13 +938,12 @@ inlet_recent_inspections |>
   geom_col() +
   facet_wrap(~districts) + 
   theme_linedraw(12) +
-  theme(legend.position = "bottom") +
-  theme(axis.text.x=element_text(angle = 90)) +
+  theme(axis.text.x=element_text(angle = 90)) + 
   labs(
-    x = "District",
-    y = "Inlets", 
+    x = "Condition",
+    y = "Inspections", 
     title = "Inlet condition by district and district category",
-    subtitle = str_wrap("Inlets in very good condition are found in general business and planned development districts", 65)
+    subtitle = str_wrap("Inlets in good condition are found in general business and planned development districts", 55)
   )
 
 ```
